@@ -1,12 +1,18 @@
 const nodemailer = require("nodemailer");
 const crypto = require("crypto");
+const EmailTemplateService = require("./emailTemplateService");
 
 class EmailService {
   constructor() {
+    this.defaultFrom = process.env.SMTP_FROM || "noreply@caredevi.com";
+
     this.transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || "smtp.gmail.com",
-      port: process.env.SMTP_PORT || 587,
+      host: process.env.SMTP_HOST,
+      port: process.env.SMTP_PORT,
       secure: false,
+      defaults: {
+        from: this.defaultFrom,
+      },
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
@@ -20,23 +26,13 @@ class EmailService {
 
   async sendVerificationOTP(email, otp, firstName) {
     const mailOptions = {
-      from: process.env.SMTP_FROM || "noreply@caredevi.com",
+      from: this.defaultFrom,
       to: email,
       subject: "Email Verification - OTP Code",
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #333; text-align: center;">Email Verification</h2>
-          <p>Hi ${firstName},</p>
-          <p>Thank you for registering! Please use the following OTP code to verify your email address:</p>
-          <div style="background-color: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0;">
-            <h1 style="color: #4CAF50; font-size: 32px; margin: 0; letter-spacing: 5px;">${otp}</h1>
-          </div>
-          <p>This code will expire in 10 minutes.</p>
-          <p>If you didn't request this verification, please ignore this email.</p>
-          <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-          <p style="color: #666; font-size: 12px;">This is an automated message, please do not reply.</p>
-        </div>
-      `,
+      html: EmailTemplateService.generateVerificationEmailTemplate(
+        firstName,
+        otp
+      ),
     };
 
     try {
@@ -50,23 +46,13 @@ class EmailService {
 
   async sendPasswordResetOTP(email, otp, firstName) {
     const mailOptions = {
-      from: process.env.SMTP_FROM || "noreply@yourapp.com",
+      from: this.defaultFrom,
       to: email,
       subject: "Password Reset - OTP Code",
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #333; text-align: center;">Password Reset</h2>
-          <p>Hi ${firstName},</p>
-          <p>You requested to reset your password. Please use the following OTP code:</p>
-          <div style="background-color: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0;">
-            <h1 style="color: #FF6B6B; font-size: 32px; margin: 0; letter-spacing: 5px;">${otp}</h1>
-          </div>
-          <p>This code will expire in 15 minutes.</p>
-          <p>If you didn't request this reset, please ignore this email and your password will remain unchanged.</p>
-          <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-          <p style="color: #666; font-size: 12px;">This is an automated message, please do not reply.</p>
-        </div>
-      `,
+      html: EmailTemplateService.generatePasswordResetEmailTemplate(
+        firstName,
+        otp
+      ),
     };
 
     try {

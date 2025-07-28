@@ -41,14 +41,26 @@ const registerSchema = z.object({
     ),
   firstName: z
     .string()
-    .min(2, "First name must be at least 2 characters long")
+    .min(1, "First name must be at least 1 character long")
     .max(50, "First name cannot exceed 50 characters")
-    .trim(),
+    .trim()
+    .optional(),
   lastName: z
     .string()
-    .min(2, "Last name must be at least 2 characters long")
+    .min(1, "Last name must be at least 1 character long")
     .max(50, "Last name cannot exceed 50 characters")
-    .trim(),
+    .trim()
+    .optional(),
+  middleName: z
+    .string()
+    .min(1, "Middle name must be at least 1 character long")
+    .max(50, "Middle name cannot exceed 50 characters")
+    .trim()
+    .optional(),
+  phoneNumber: z
+    .string()
+    .regex(/^\+?[\d\s\-\(\)]{10,15}$/, "Please provide a valid phone number")
+    .optional(),
   role: z.enum(["USER", "ADMIN"]).default("USER").optional(),
 });
 
@@ -104,15 +116,25 @@ const refreshTokenSchema = z.object({
 const updateProfileSchema = z.object({
   firstName: z
     .string()
-    .min(2, "First name must be at least 2 characters long")
+    .min(1, "First name must be at least 1 character long")
     .max(50, "First name cannot exceed 50 characters")
     .trim()
     .optional(),
   lastName: z
     .string()
-    .min(2, "Last name must be at least 2 characters long")
+    .min(1, "Last name must be at least 1 character long")
     .max(50, "Last name cannot exceed 50 characters")
     .trim()
+    .optional(),
+  middleName: z
+    .string()
+    .min(1, "Middle name must be at least 1 character long")
+    .max(50, "Middle name cannot exceed 50 characters")
+    .trim()
+    .optional(),
+  phoneNumber: z
+    .string()
+    .regex(/^\+?[\d\s\-\(\)]{10,15}$/, "Please provide a valid phone number")
     .optional(),
 });
 

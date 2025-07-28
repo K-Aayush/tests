@@ -1,16 +1,16 @@
 const express = require("express");
 const rateLimit = require("express-rate-limit");
 const router = express.Router();
+const { register } = require("../controllers/auth/registerController");
+const { login } = require("../controllers/auth/loginController");
+const { logout } = require("../controllers/auth/logoutController");
+const { verifyEmail } = require("../controllers/auth/verifyEmailController");
+const { refreshToken } = require("../controllers/auth/refreshTokenController");
 const {
-  register,
-  login,
-  logout,
-  verifyEmail,
-  refreshToken,
   requestPasswordReset,
   resetPassword,
-  getProfile,
-} = require("../controllers/authController");
+} = require("../controllers/auth/passwordResetController");
+const { getProfile } = require("../controllers/auth/profileController");
 const { authenticateToken } = require("../middlewares/auth");
 const {
   validateRequest,
