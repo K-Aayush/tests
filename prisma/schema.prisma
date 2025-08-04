@@ -51,3 +51,94 @@ model EmailOTP {
 
   @@map("email_otps")
 }
+
+model Patient {
+  id                  String                @id @default(cuid())
+  identifier          Identifier[]
+  active              Boolean               @default(true)
+  firstName           String
+  middleName          String?
+  lastName            String
+  preferredName       String?
+  contactPointType    ContactPointSystem?
+  contactPointValue   String?
+  gender              AdministrativeGender?
+  birthDate           DateTime?
+  deceased            Boolean?
+  address             Address[]
+  maritalStatus       String?
+  empi                String?
+  generalPractitioner String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  @@map("patients")
+}
+
+model Identifier {
+  id        String         @id @default(cuid())
+  use       IdentifierUse?
+  system    String?
+  value     String
+  type      String?
+  patient   Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patientId String
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@map("identifiers")
+}
+
+model Address {
+  id         String       @id @default(cuid())
+  use        AddressUse?
+  type       AddressType?
+  text       String?
+  line       String[]
+  city       String?
+  state      String?
+  postalCode String?
+  country    String?
+  patient    Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patientId  String
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@map("addresses")
+}
+
+enum AdministrativeGender {
+  male
+  female
+  other
+  unknown
+}
+
+enum ContactPointSystem {
+  phone
+  fax
+  email
+  sms
+}
+
+enum AddressType {
+  postal
+  physical
+  both
+}
+
+enum AddressUse {
+  home
+  work
+  temp
+  old
+  billing
+}
+
+enum IdentifierUse {
+  usual
+  official
+  temp
+  secondary
+  old
+}

@@ -3,11 +3,14 @@ const cors = require("cors");
 const helmet = require("helmet");
 const cookieParser = require("cookie-parser");
 const rateLimit = require("express-rate-limit");
+const { expressMiddleware } = require("@apollo/server/express4");
 const { initializeKeyRotation } = require("./config/jwt");
 require("dotenv").config();
 
 const authRoutes = require("./routes/authRoutes");
 const keyRotationRoutes = require("./routes/keyRotationRoutes");
+const patientRoutes = require("./routes/patientRoutes");
+const { createApolloServer, createContext } = require("./graphql/server");
 const { errorHandler, notFoundHandler } = require("./middlewares/errorHandler");
 
 const app = express();
@@ -17,8 +20,8 @@ initializeKeyRotation().catch(console.error);
 
 // Global rate limiting
 const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, 
-  max: 100, 
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   message: {
     success: false,
     message: "Too many requests from this IP, please try again later",
@@ -60,6 +63,28 @@ app.get("/health", (req, res) => {
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/keys", keyRotationRoutes);
+app.use("/api/patients", patientRoutes);
+
+const startGraphQLServer = async () => {
+  const apolloServer = createApolloServer();
+  await apolloServer.start();
+
+  app.use(
+    "/graphql",
+    cors({
+      origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+      credentials: true,
+    }),
+    express.json(),
+    expressMiddleware(apolloServer, {
+      context: createContext,
+    })
+  );
+
+  console.log("GraphQL server ready at /graphql");
+};
+
+startGraphQLServer().catch(console.error);
 
 // Error handling
 app.use(notFoundHandler);

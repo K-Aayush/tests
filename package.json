@@ -12,22 +12,29 @@
     "prisma:push": "prisma db push"
   },
   "dependencies": {
+    "@apollo/server": "^5.0.0",
     "@prisma/client": "^5.7.1",
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "helmet": "^7.1.0",
     "bcrypt": "^5.1.1",
-    "jsonwebtoken": "^9.0.2",
-    "nodemailer": "^6.9.8",
-    "express-rate-limit": "^7.1.5",
+    "class-validator": "^0.14.2",
     "cookie-parser": "^1.4.6",
-    "dotenv": "^16.3.1",
+    "cors": "^2.8.5",
     "crypto": "^1.0.1",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "graphql": "^16.11.0",
+    "graphql-tag": "^2.12.6",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "lodash": "^4.17.21",
+    "nodemailer": "^6.9.8",
+    "reflect-metadata": "^0.2.2",
+    "type-graphql": "^2.0.0-rc.2",
     "zod": "^3.22.4"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2",
     "jest": "^29.7.0",
+    "nodemon": "^3.0.2",
     "prisma": "^5.7.1"
   }
 }
