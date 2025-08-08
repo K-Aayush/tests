@@ -7,10 +7,12 @@ const {
   getPatient,
   getAllPatients,
   deletePatient,
+  restorePatient,
 } = require("../controllers/patient/patientController");
 const {
   authenticateToken,
   requireEmailVerification,
+  requireRole,
 } = require("../middlewares/auth");
 
 // Rate limiting for patient operations
@@ -36,5 +38,6 @@ router.get("/", getAllPatients);
 router.get("/:id", getPatient);
 router.put("/:id", updatePatient);
 router.delete("/:id", deletePatient);
+router.patch("/:id/restore", requireRole(["ADMIN"]), restorePatient);
 
 module.exports = router;

@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const fs = require("fs").promises;
 const path = require("path");
+const prisma = require("../../prisma/client");
 
 class KeyRotationService {
   constructor() {
@@ -8,8 +9,8 @@ class KeyRotationService {
     this.currentKeyFile = path.join(this.keysDir, "current-keys.json");
     this.keyHistory = new Map();
     this.currentKeys = null;
-    this.keyRotationInterval = 24 * 60 * 60 * 1000; 
-    this.keyExpiryTime = 7 * 24 * 60 * 60 * 1000; 
+    this.keyRotationInterval = 24 * 60 * 60 * 1000;
+    this.keyExpiryTime = 7 * 24 * 60 * 60 * 1000;
   }
 
   async initialize() {
@@ -18,7 +19,6 @@ class KeyRotationService {
 
       await this.loadOrGenerateKeys();
 
-    
       this.startKeyRotation();
 
       console.log("JWT Key Rotation Service initialized");
@@ -54,6 +54,7 @@ class KeyRotationService {
       keys.version &&
       keys.accessSecret &&
       keys.refreshSecret &&
+      keys.checksum &&
       keys.createdAt &&
       keys.expiresAt
     );
@@ -66,18 +67,69 @@ class KeyRotationService {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + this.keyExpiryTime);
 
+    // Generate checksum for validation
+    const checksum = this.generateChecksum(
+      accessSecret,
+      refreshSecret,
+      version
+    );
     this.currentKeys = {
       version,
       accessSecret,
       refreshSecret,
+      checksum,
       createdAt: now.toISOString(),
       expiresAt: expiresAt.toISOString(),
     };
 
     await this.saveKeys();
+    await this.logKeyRotation(version, checksum);
     console.log(`Generated new keys with version: ${version}`);
   }
 
+  generateChecksum(accessSecret, refreshSecret, version) {
+    const data = `${accessSecret}:${refreshSecret}:${version}`;
+    return crypto.createHash("sha256").update(data).digest("hex");
+  }
+
+  async logKeyRotation(version, checksum) {
+    try {
+      await prisma.keyRotationLog.create({
+        data: {
+          version,
+          checksum,
+          expiresAt: new Date(Date.now() + this.keyExpiryTime),
+          rotatedBy: "SYSTEM",
+        },
+      });
+    } catch (error) {
+      console.error("Failed to log key rotation:", error);
+    }
+  }
+
+  async validateKeyChecksum(version) {
+    try {
+      const logEntry = await prisma.keyRotationLog.findUnique({
+        where: { version },
+      });
+
+      if (!logEntry) return false;
+
+      const keyData = this.keyHistory.get(version) || this.currentKeys;
+      if (!keyData) return false;
+
+      const expectedChecksum = this.generateChecksum(
+        keyData.accessSecret,
+        keyData.refreshSecret,
+        version
+      );
+
+      return logEntry.checksum === expectedChecksum;
+    } catch (error) {
+      console.error("Checksum validation error:", error);
+      return false;
+    }
+  }
   generateKeyVersion() {
     return `v${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
   }
@@ -203,7 +255,7 @@ class KeyRotationService {
   }
 
   isKeyVersionValid(version) {
-    if (!version) return true; 
+    if (!version) return true;
 
     return (
       this.keyHistory.has(version) || version === this.currentKeys?.version

@@ -28,12 +28,19 @@ const verifyAsync = (token, secret, options) => {
 
 const generateAccessToken = async (payload) => {
   try {
+    // Sanitize payload to only allow whitelisted claims
+    const sanitizedPayload = sanitizeTokenPayload(payload);
+
     const secret = keyRotationService.getCurrentAccessSecret();
     const keyVersion = keyRotationService.getCurrentKeyVersion();
+    const jti = crypto.randomUUID();
+    const iat = Math.floor(Date.now() / 1000);
 
     const tokenPayload = {
-      ...payload,
+      ...sanitizedPayload,
       keyVersion,
+      jti,
+      iat,
     };
 
     return await signAsync(tokenPayload, secret, {
@@ -49,12 +56,19 @@ const generateAccessToken = async (payload) => {
 
 const generateRefreshToken = async (payload) => {
   try {
+    // Sanitize payload for refresh token
+    const sanitizedPayload = sanitizeRefreshTokenPayload(payload);
+
     const secret = keyRotationService.getCurrentRefreshSecret();
     const keyVersion = keyRotationService.getCurrentKeyVersion();
+    const jti = crypto.randomUUID();
+    const iat = Math.floor(Date.now() / 1000);
 
     const tokenPayload = {
-      ...payload,
+      ...sanitizedPayload,
       keyVersion,
+      jti,
+      iat,
     };
 
     return await signAsync(tokenPayload, secret, {
@@ -68,19 +82,55 @@ const generateRefreshToken = async (payload) => {
   }
 };
 
+// Whitelist allowed claims for access tokens
+const sanitizeTokenPayload = (payload) => {
+  const allowedClaims = ["id", "email", "role", "firstName", "lastName"];
+  const sanitized = {};
+
+  allowedClaims.forEach((claim) => {
+    if (payload[claim] !== undefined) {
+      sanitized[claim] = payload[claim];
+    }
+  });
+
+  return sanitized;
+};
+
+// Whitelist allowed claims for refresh tokens
+const sanitizeRefreshTokenPayload = (payload) => {
+  const allowedClaims = ["id"];
+  const sanitized = {};
+
+  allowedClaims.forEach((claim) => {
+    if (payload[claim] !== undefined) {
+      sanitized[claim] = payload[claim];
+    }
+  });
+
+  return sanitized;
+};
 const verifyAccessToken = async (token) => {
   try {
     const decoded = jwt.decode(token);
     const keyVersion = decoded?.keyVersion;
 
+    // Validate key checksum
+    if (
+      keyVersion &&
+      !(await keyRotationService.validateKeyChecksum(keyVersion))
+    ) {
+      throw new Error("Invalid key checksum");
+    }
     // Get the appropriate secret based on key version
     const secret = keyRotationService.getAccessSecretByVersion(keyVersion);
 
     // Verify with the correct secret
-    return await verifyAsync(token, secret, {
+    const verified = await verifyAsync(token, secret, {
       issuer: JWT_CONFIG.issuer,
       audience: JWT_CONFIG.audience,
     });
+
+    return verified;
   } catch (error) {
     console.error("Access token verification error:", error);
     throw error;
@@ -92,14 +142,23 @@ const verifyRefreshToken = async (token) => {
     const decoded = jwt.decode(token);
     const keyVersion = decoded?.keyVersion;
 
+    // Validate key checksum
+    if (
+      keyVersion &&
+      !(await keyRotationService.validateKeyChecksum(keyVersion))
+    ) {
+      throw new Error("Invalid key checksum");
+    }
     // Get the appropriate secret based on key version
     const secret = keyRotationService.getRefreshSecretByVersion(keyVersion);
 
     // Verify with the correct secret
-    return await verifyAsync(token, secret, {
+    const verified = await verifyAsync(token, secret, {
       issuer: JWT_CONFIG.issuer,
       audience: JWT_CONFIG.audience,
     });
+
+    return verified;
   } catch (error) {
     console.error("Refresh token verification error:", error);
     throw error;

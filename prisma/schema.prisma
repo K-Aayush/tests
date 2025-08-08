@@ -23,6 +23,7 @@ model User {
   passwordResetExpires     DateTime?
   lastLogin                DateTime?
   refreshTokens            RefreshToken[]
+  loginSessions            LoginSession[]
   createdAt                DateTime       @default(now())
   updatedAt                DateTime       @updatedAt
 
@@ -40,6 +41,21 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
+model LoginSession {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jti       String   @unique // JWT ID for tracking
+  iat       DateTime // Issued at time
+  ipAddress String?
+  userAgent String?
+  isActive  Boolean  @default(true)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("login_sessions")
+}
+
 model EmailOTP {
   id        String   @id @default(uuid())
   email     String
@@ -52,9 +68,19 @@ model EmailOTP {
   @@map("email_otps")
 }
 
+model OTPAttempt {
+  id        String   @id @default(uuid())
+  email     String
+  type      String // 'verification' or 'password_reset'
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@map("otp_attempts")
+}
+
 model Patient {
   id                  String                @id @default(cuid())
-  identifier          Identifier[]
   active              Boolean               @default(true)
   firstName           String
   middleName          String?
@@ -69,6 +95,7 @@ model Patient {
   maritalStatus       String?
   empi                String?
   generalPractitioner String?
+  deletedAt           DateTime? // Soft delete timestamp
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
 
@@ -76,35 +103,49 @@ model Patient {
 }
 
 model Identifier {
-  id        String         @id @default(cuid())
-  use       IdentifierUse?
-  system    String?
-  value     String
-  type      String?
-  patient   Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  patientId String
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  id               String         @id @default(cuid())
+  use              IdentifierUse?
+  system           String?
+  value            String
+  type             String?
+  identifiableId   String // Polymorphic foreign key
+  identifiableType String // Type of the related model (e.g., 'Patient')
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 
   @@map("identifiers")
 }
 
 model Address {
-  id         String       @id @default(cuid())
-  use        AddressUse?
-  type       AddressType?
-  text       String?
-  line       String[]
-  city       String?
-  state      String?
-  postalCode String?
-  country    String?
-  patient    Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  patientId  String
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
+  id              String       @id @default(cuid())
+  use             AddressUse?
+  type            AddressType?
+  text            String?
+  line            String[]
+  city            String?
+  state           String?
+  postalCode      String?
+  country         String?
+  addressableId   String // Polymorphic foreign key
+  addressableType String // Type of the related model (e.g., 'Patient')
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  Patient         Patient?     @relation(fields: [patientId], references: [id])
+  patientId       String?
 
   @@map("addresses")
+}
+
+model KeyRotationLog {
+  id        String   @id @default(uuid())
+  version   String   @unique
+  checksum  String // SHA-256 checksum of the key
+  rotatedAt DateTime @default(now())
+  rotatedBy String? // System or admin user ID
+  isActive  Boolean  @default(true)
+  expiresAt DateTime
+
+  @@map("key_rotation_logs")
 }
 
 enum AdministrativeGender {

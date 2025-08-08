@@ -29,18 +29,20 @@ const identifierSchema = z.object({
 
 // Create patient schema
 const createPatientSchema = z.object({
-  identifier: z.array(identifierSchema).optional(),
+  identifier: z
+    .array(identifierSchema)
+    .min(1, "At least one identifier is required"),
   active: z.boolean().default(true),
   firstName: z.string().min(1, "First name is required"),
   middleName: z.string().optional(),
   lastName: z.string().min(1, "Last name is required"),
   preferredName: z.string().optional(),
-  contactPointType: ContactPointSystem.optional(),
-  contactPointValue: z.string().optional(),
-  gender: AdministrativeGender.optional(),
-  birthDate: z.string().datetime().optional(),
+  contactPointType: ContactPointSystem,
+  contactPointValue: z.string().min(1, "Contact point value is required"),
+  gender: AdministrativeGender,
+  birthDate: z.string().datetime(),
   deceased: z.boolean().optional(),
-  address: z.array(addressSchema).optional(),
+  address: z.array(addressSchema).min(1, "At least one address is required"),
   maritalStatus: z.string().optional(),
   empi: z.string().optional(),
   generalPractitioner: z.string().optional(),

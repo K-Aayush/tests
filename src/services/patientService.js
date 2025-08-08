@@ -9,26 +9,32 @@ class PatientService {
     }
 
     const patient = await prisma.patient.create({
-      data: {
-        ...patientFields,
-        identifier: identifier
-          ? {
-              create: identifier,
-            }
-          : undefined,
-        address: address
-          ? {
-              create: address,
-            }
-          : undefined,
-      },
-      include: {
-        identifier: true,
-        address: true,
-      },
+      data: patientFields,
     });
 
-    return patient;
+    // Create identifiers with polymorphic relation
+    if (identifier && identifier.length > 0) {
+      await prisma.identifier.createMany({
+        data: identifier.map((id) => ({
+          ...id,
+          identifiableId: patient.id,
+          identifiableType: "Patient",
+        })),
+      });
+    }
+
+    // Create addresses with polymorphic relation
+    if (address && address.length > 0) {
+      await prisma.address.createMany({
+        data: address.map((addr) => ({
+          ...addr,
+          addressableId: patient.id,
+          addressableType: "Patient",
+        })),
+      });
+    }
+
+    return this.getPatientById(patient.id);
   }
 
   async updatePatient(id, patientData) {
@@ -38,57 +44,97 @@ class PatientService {
       patientFields.birthDate = new Date(patientFields.birthDate);
     }
 
-    let identifierUpdate = undefined;
-    if (identifier) {
-      await prisma.identifier.deleteMany({
-        where: { patientId: id },
-      });
-      identifierUpdate = {
-        create: identifier,
-      };
-    }
-
-    let addressUpdate = undefined;
-    if (address) {
-      await prisma.address.deleteMany({
-        where: { patientId: id },
-      });
-      addressUpdate = {
-        create: address,
-      };
-    }
-
+    // Update patient data
     const patient = await prisma.patient.update({
       where: { id },
-      data: {
-        ...patientFields,
-        identifier: identifierUpdate,
-        address: addressUpdate,
-      },
-      include: {
-        identifier: true,
-        address: true,
-      },
+      data: patientFields,
     });
 
-    return patient;
+    // Update identifiers if provided
+    if (identifier) {
+      // Delete existing identifiers
+      await prisma.identifier.deleteMany({
+        where: {
+          identifiableId: id,
+          identifiableType: "Patient",
+        },
+      });
+
+      // Create new identifiers
+      if (identifier.length > 0) {
+        await prisma.identifier.createMany({
+          data: identifier.map((id) => ({
+            ...id,
+            identifiableId: patient.id,
+            identifiableType: "Patient",
+          })),
+        });
+      }
+    }
+
+    // Update addresses if provided
+    if (address) {
+      // Delete existing addresses
+      await prisma.address.deleteMany({
+        where: {
+          addressableId: id,
+          addressableType: "Patient",
+        },
+      });
+
+      // Create new addresses
+      if (address.length > 0) {
+        await prisma.address.createMany({
+          data: address.map((addr) => ({
+            ...addr,
+            addressableId: patient.id,
+            addressableType: "Patient",
+          })),
+        });
+      }
+    }
+
+    return this.getPatientById(patient.id);
   }
 
   async getPatientById(id) {
-    const patient = await prisma.patient.findUnique({
-      where: { id },
-      include: {
-        identifier: true,
-        address: true,
+    const patient = await prisma.patient.findFirst({
+      where: {
+        id,
+        deletedAt: null, // Only get non-deleted patients
       },
     });
 
-    return patient;
+    if (!patient) return null;
+
+    // Get identifiers and addresses separately due to polymorphic relations
+    const [identifiers, addresses] = await Promise.all([
+      prisma.identifier.findMany({
+        where: {
+          identifiableId: id,
+          identifiableType: "Patient",
+        },
+      }),
+      prisma.address.findMany({
+        where: {
+          addressableId: id,
+          addressableType: "Patient",
+        },
+      }),
+    ]);
+
+    return {
+      ...patient,
+      identifier: identifiers,
+      address: addresses,
+    };
   }
 
   async getAllPatients(page = 1, limit = 10, filters = {}) {
     const skip = (page - 1) * limit;
-    const where = {};
+    const where = {
+      deletedAt: null, // Only get non-deleted patients
+    };
 
     // Apply filters
     if (filters.active !== undefined) {
@@ -109,10 +155,6 @@ class PatientService {
     const [patients, total] = await Promise.all([
       prisma.patient.findMany({
         where,
-        include: {
-          identifier: true,
-          address: true,
-        },
         skip,
         take: limit,
         orderBy: { createdAt: "desc" },
@@ -120,8 +162,34 @@ class PatientService {
       prisma.patient.count({ where }),
     ]);
 
+    // Get identifiers and addresses for each patient
+    const patientsWithRelations = await Promise.all(
+      patients.map(async (patient) => {
+        const [identifiers, addresses] = await Promise.all([
+          prisma.identifier.findMany({
+            where: {
+              identifiableId: patient.id,
+              identifiableType: "Patient",
+            },
+          }),
+          prisma.address.findMany({
+            where: {
+              addressableId: patient.id,
+              addressableType: "Patient",
+            },
+          }),
+        ]);
+
+        return {
+          ...patient,
+          identifier: identifiers,
+          address: addresses,
+        };
+      })
+    );
+
     return {
-      patients,
+      patients: patientsWithRelations,
       pagination: {
         page,
         limit,
@@ -132,9 +200,46 @@ class PatientService {
   }
 
   async deletePatient(id) {
-    await prisma.patient.delete({
+    // Soft delete - set deletedAt timestamp
+    await prisma.patient.update({
       where: { id },
+      data: {
+        deletedAt: new Date(),
+        active: false,
+      },
     });
+  }
+
+  async restorePatient(id) {
+    // Restore soft deleted patient
+    await prisma.patient.update({
+      where: { id },
+      data: {
+        deletedAt: null,
+        active: true,
+      },
+    });
+  }
+
+  async permanentlyDeletePatient(id) {
+    // Hard delete - only for admin use
+    await prisma.$transaction([
+      prisma.identifier.deleteMany({
+        where: {
+          identifiableId: id,
+          identifiableType: "Patient",
+        },
+      }),
+      prisma.address.deleteMany({
+        where: {
+          addressableId: id,
+          addressableType: "Patient",
+        },
+      }),
+      prisma.patient.delete({
+        where: { id },
+      }),
+    ]);
   }
 }
 

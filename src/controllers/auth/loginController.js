@@ -4,6 +4,7 @@ const {
   generateAccessToken,
   generateRefreshToken,
 } = require("../../config/jwt");
+const jwt = require("jsonwebtoken");
 
 exports.login = async (req, res) => {
   try {
@@ -35,6 +36,9 @@ exports.login = async (req, res) => {
     const accessToken = await generateAccessToken(payload);
     const refreshToken = await generateRefreshToken({ id: user.id });
 
+    // Extract JTI from tokens for session tracking
+    const accessDecoded = jwt.decode(accessToken);
+    const refreshDecoded = jwt.decode(refreshToken);
     // Store refresh token
     await prisma.refreshToken.create({
       data: {
@@ -44,6 +48,17 @@ exports.login = async (req, res) => {
       },
     });
 
+    // Create login session record
+    await prisma.loginSession.create({
+      data: {
+        userId: user.id,
+        jti: accessDecoded.jti,
+        iat: new Date(accessDecoded.iat * 1000),
+        ipAddress: req.ip,
+        userAgent: req.get("User-Agent"),
+        expiresAt: new Date(accessDecoded.exp * 1000),
+      },
+    });
     // Update last login
     await prisma.user.update({
       where: { id: user.id },
@@ -60,6 +75,7 @@ exports.login = async (req, res) => {
         accessToken,
         refreshToken,
         tokenType: "Bearer",
+        sessionId: accessDecoded.jti,
       },
     });
   } catch (error) {

@@ -144,7 +144,7 @@ const deletePatient = async (req, res) => {
 
     res.json({
       success: true,
-      message: "Patient deleted successfully",
+      message: "Patient soft deleted successfully",
     });
   } catch (error) {
     console.error("Delete patient error:", error);
@@ -155,10 +155,29 @@ const deletePatient = async (req, res) => {
   }
 };
 
+const restorePatient = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await patientService.restorePatient(id);
+
+    res.json({
+      success: true,
+      message: "Patient restored successfully",
+    });
+  } catch (error) {
+    console.error("Restore patient error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to restore patient",
+    });
+  }
+};
 module.exports = {
   createPatient,
   updatePatient,
   getPatient,
   getAllPatients,
   deletePatient,
+  restorePatient,
 };
