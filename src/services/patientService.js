@@ -1,8 +1,14 @@
 const prisma = require("../../prisma/client");
+const { generatePrefixedExternalId } = require("../utils/externalId");
 
 class PatientService {
   async createPatient(patientData) {
     const { identifier, address, ...patientFields } = patientData;
+
+    // Generate external ID if not provided
+    if (!patientFields.externalId) {
+      patientFields.externalId = generatePrefixedExternalId("pat");
+    }
 
     if (patientFields.birthDate) {
       patientFields.birthDate = new Date(patientFields.birthDate);
@@ -130,6 +136,39 @@ class PatientService {
     };
   }
 
+  async getPatientByExternalId(externalId) {
+    const patient = await prisma.patient.findFirst({
+      where: {
+        externalId,
+        deletedAt: null,
+      },
+    });
+
+    if (!patient) return null;
+
+    // Get identifiers and addresses separately due to polymorphic relations
+    const [identifiers, addresses] = await Promise.all([
+      prisma.identifier.findMany({
+        where: {
+          identifiableId: patient.id,
+          identifiableType: "Patient",
+        },
+      }),
+      prisma.address.findMany({
+        where: {
+          addressableId: patient.id,
+          addressableType: "Patient",
+        },
+      }),
+    ]);
+
+    return {
+      ...patient,
+      identifier: identifiers,
+      address: addresses,
+    };
+  }
+
   async getAllPatients(page = 1, limit = 10, filters = {}) {
     const skip = (page - 1) * limit;
     const where = {
@@ -149,6 +188,7 @@ class PatientService {
         { lastName: { contains: filters.search, mode: "insensitive" } },
         { preferredName: { contains: filters.search, mode: "insensitive" } },
         { empi: { contains: filters.search, mode: "insensitive" } },
+        { externalId: { contains: filters.search, mode: "insensitive" } },
       ];
     }
 

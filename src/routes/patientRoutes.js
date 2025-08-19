@@ -1,14 +1,14 @@
 const express = require("express");
 const rateLimit = require("express-rate-limit");
 const router = express.Router();
+const { createPatient } = require("../controllers/patient/createPatient");
 const {
-  createPatient,
-  updatePatient,
   getPatient,
   getAllPatients,
-  deletePatient,
-  restorePatient,
-} = require("../controllers/patient/patientController");
+} = require("../controllers/patient/getPatient");
+const { updatePatient } = require("../controllers/patient/updatePatient");
+const { deletePatient } = require("../controllers/patient/deletePatient");
+const { restorePatient } = require("../controllers/patient/restorePatient");
 const {
   authenticateToken,
   requireEmailVerification,
@@ -36,6 +36,7 @@ router.use(patientLimiter);
 router.post("/", createPatient);
 router.get("/", getAllPatients);
 router.get("/:id", getPatient);
+router.get("/external/:externalId", getPatient);
 router.put("/:id", updatePatient);
 router.delete("/:id", deletePatient);
 router.patch("/:id/restore", requireRole(["ADMIN"]), restorePatient);

@@ -81,6 +81,7 @@ model OTPAttempt {
 
 model Patient {
   id                  String                @id @default(cuid())
+  externalId          String                @unique @default(cuid())
   active              Boolean               @default(true)
   firstName           String
   middleName          String?
@@ -98,8 +99,39 @@ model Patient {
   deletedAt           DateTime? // Soft delete timestamp
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
+  appointments        Appointment[]
 
   @@map("patients")
+}
+
+model Appointment {
+  id          String            @id @default(cuid())
+  externalId  String            @unique @default(cuid())
+  title       String
+  description String?
+  startTime   DateTime
+  endTime     DateTime
+  status      AppointmentStatus @default(scheduled)
+  type        String?
+  location    String?
+  notes       String?
+  patientId   String
+  patient     Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  providerId  String?
+  deletedAt   DateTime? // Soft delete timestamp
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@map("appointments")
+}
+
+enum AppointmentStatus {
+  scheduled
+  confirmed
+  in_progress
+  completed
+  cancelled
+  no_show
 }
 
 model Identifier {

@@ -10,6 +10,7 @@ require("dotenv").config();
 const authRoutes = require("./routes/authRoutes");
 const keyRotationRoutes = require("./routes/keyRotationRoutes");
 const patientRoutes = require("./routes/patientRoutes");
+const appointmentRoutes = require("./routes/appointmentRoutes");
 const { createApolloServer, createContext } = require("./graphql/server");
 const { errorHandler, notFoundHandler } = require("./middlewares/errorHandler");
 
@@ -64,6 +65,7 @@ app.get("/health", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/keys", keyRotationRoutes);
 app.use("/api/patients", patientRoutes);
+app.use("/api/appointments", appointmentRoutes);
 
 const startGraphQLServer = async () => {
   const apolloServer = createApolloServer();

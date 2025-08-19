@@ -29,6 +29,7 @@ const identifierSchema = z.object({
 
 // Create patient schema
 const createPatientSchema = z.object({
+  externalId: z.string().optional(),
   identifier: z
     .array(identifierSchema)
     .min(1, "At least one identifier is required"),
@@ -54,6 +55,7 @@ const updatePatientSchema = createPatientSchema.partial();
 // Patient response schema
 const patientResponseSchema = z.object({
   id: z.string(),
+  externalId: z.string(),
   identifier: z
     .array(
       z.object({

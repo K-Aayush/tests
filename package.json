@@ -27,6 +27,7 @@
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "lodash": "^4.17.21",
+    "nanoid": "^5.1.5",
     "nodemailer": "^6.9.8",
     "reflect-metadata": "^0.2.2",
     "type-graphql": "^2.0.0-rc.2",
