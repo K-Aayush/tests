@@ -11,6 +11,8 @@ const authRoutes = require("./routes/authRoutes");
 const keyRotationRoutes = require("./routes/keyRotationRoutes");
 const patientRoutes = require("./routes/patientRoutes");
 const appointmentRoutes = require("./routes/appointmentRoutes");
+const practitionerRoutes = require("./routes/practitionerRoutes");
+const taskRoutes = require("./routes/taskRoutes");
 const { createApolloServer, createContext } = require("./graphql/server");
 const { errorHandler, notFoundHandler } = require("./middlewares/errorHandler");
 
@@ -66,6 +68,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/keys", keyRotationRoutes);
 app.use("/api/patients", patientRoutes);
 app.use("/api/appointments", appointmentRoutes);
+app.use("/api/practitioners", practitionerRoutes);
+app.use("/api/tasks", taskRoutes);
 
 const startGraphQLServer = async () => {
   const apolloServer = createApolloServer();

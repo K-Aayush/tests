@@ -215,3 +215,88 @@ enum IdentifierUse {
   secondary
   old
 }
+
+enum TaskStatus {
+  draft
+  requested
+  received
+  accepted
+  rejected
+  ready
+  cancelled
+  in_progress
+  on_hold
+  failed
+  completed
+  entered_in_error
+}
+
+enum TaskIntent {
+  unknown
+  proposal
+  plan
+  order
+  original_order
+  reflex_order
+  filler_order
+  instance_order
+  option
+}
+
+enum TaskPriority {
+  routine
+  urgent
+  asap
+  stat
+}
+
+model Practitioner {
+  id             String   @id @default(uuid())
+  firstName      String
+  lastName       String
+  middleName     String?
+  prefix         String?
+  suffix         String?
+  npi            String?  @unique
+  specialty      String?
+  email          String?  @unique
+  phone          String?
+  address        Json?
+  active         Boolean  @default(true)
+  organizationId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  requestedTasks Task[] @relation("TaskRequester")
+  ownedTasks     Task[] @relation("TaskOwner")
+
+  @@map("practitioners")
+}
+
+model Task {
+  id                   String        @id @default(uuid())
+  externalId           String        @unique @default(cuid())
+  status               TaskStatus    @default(draft)
+  intent               TaskIntent    @default(unknown)
+  priority             TaskPriority? @default(routine)
+  code                 String
+  description          String?
+  focusId              String?       // Polymorphic reference to Patient, Encounter, etc.
+  focusType            String?       // Type of the focused resource (e.g., 'Patient', 'Encounter')
+  requesterId          String?       // Reference to Practitioner or Organization
+  ownerId              String?       // Assigned practitioner or system
+  executionPeriodStart DateTime?
+  executionPeriodEnd   DateTime?
+  authoredOn           DateTime      @default(now())
+  lastModified         DateTime      @updatedAt
+  deletedAt            DateTime?     // Soft delete timestamp
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  // Relations
+  requester Practitioner? @relation("TaskRequester", fields: [requesterId], references: [id])
+  owner     Practitioner? @relation("TaskOwner", fields: [ownerId], references: [id])
+
+  @@map("tasks")
+}
