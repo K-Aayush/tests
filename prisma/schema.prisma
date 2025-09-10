@@ -100,6 +100,8 @@ model Patient {
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
   appointments        Appointment[]
+  Condition           Condition[]
+  Consent             Consent[]
 
   @@map("patients")
 }
@@ -250,6 +252,52 @@ enum TaskPriority {
   stat
 }
 
+enum ConditionClinicalStatus {
+  active
+  recurrence
+  relapse
+  inactive
+  remission
+  resolved
+}
+
+enum ConditionVerificationStatus {
+  unconfirmed
+  provisional
+  differential
+  confirmed
+  refuted
+  entered_in_error
+}
+
+enum ConditionCategory {
+  problem_list_item
+  encounter_diagnosis
+}
+
+enum ConditionSeverity {
+  mild
+  moderate
+  severe
+}
+
+enum ConsentStatus {
+  draft
+  proposed
+  active
+  rejected
+  inactive
+  entered_in_error
+}
+
+enum ConsentCategory {
+  privacy
+  treatment
+  research
+  advance_directive
+  disclosure
+}
+
 model Practitioner {
   id             String   @id @default(uuid())
   firstName      String
@@ -268,8 +316,9 @@ model Practitioner {
   updatedAt      DateTime @updatedAt
 
   // Relations
-  requestedTasks Task[] @relation("TaskRequester")
-  ownedTasks     Task[] @relation("TaskOwner")
+  requestedTasks     Task[]      @relation("TaskRequester")
+  ownedTasks         Task[]      @relation("TaskOwner")
+  recordedConditions Condition[] @relation("ConditionRecorder")
 
   @@map("practitioners")
 }
@@ -282,15 +331,15 @@ model Task {
   priority             TaskPriority? @default(routine)
   code                 String
   description          String?
-  focusId              String?       // Polymorphic reference to Patient, Encounter, etc.
-  focusType            String?       // Type of the focused resource (e.g., 'Patient', 'Encounter')
-  requesterId          String?       // Reference to Practitioner or Organization
-  ownerId              String?       // Assigned practitioner or system
+  focusId              String? // Polymorphic reference to Patient, Encounter, etc.
+  focusType            String? // Type of the focused resource (e.g., 'Patient', 'Encounter')
+  requesterId          String? // Reference to Practitioner or Organization
+  ownerId              String? // Assigned practitioner or system
   executionPeriodStart DateTime?
   executionPeriodEnd   DateTime?
   authoredOn           DateTime      @default(now())
   lastModified         DateTime      @updatedAt
-  deletedAt            DateTime?     // Soft delete timestamp
+  deletedAt            DateTime? // Soft delete timestamp
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @updatedAt
 
@@ -299,4 +348,56 @@ model Task {
   owner     Practitioner? @relation("TaskOwner", fields: [ownerId], references: [id])
 
   @@map("tasks")
+}
+
+model Condition {
+  id                 String                      @id @default(uuid())
+  externalId         String                      @unique @default(cuid())
+  clinicalStatus     ConditionClinicalStatus
+  verificationStatus ConditionVerificationStatus
+  category           ConditionCategory?
+  severity           ConditionSeverity?
+  code               String // SNOMED or ICD-10 code
+  codeSystem         String? // e.g., "http://snomed.info/sct"
+  codeDisplay        String? // Human readable display name
+  subjectId          String // Foreign key to Patient
+  encounterId        String? // Optional link to Encounter
+  onsetDateTime      DateTime?
+  recordedDate       DateTime                    @default(now())
+  recordedBy         String? // Reference to Practitioner who recorded
+  notes              String? // Additional clinical notes
+  deletedAt          DateTime? // Soft delete timestamp
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+
+  subject  Patient       @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  recorder Practitioner? @relation("ConditionRecorder", fields: [recordedBy], references: [id])
+
+  @@map("conditions")
+}
+
+model Consent {
+  id               String          @id @default(uuid())
+  externalId       String          @unique @default(cuid())
+  status           ConsentStatus
+  category         ConsentCategory
+  patientId        String // Foreign key to Patient
+  organizationId   String? // Optional reference to managing Organization
+  dateTime         DateTime        @default(now())
+  periodStart      DateTime?
+  periodEnd        DateTime?
+  provision        Json? // Rules about permitted/denied actions
+  sourceAttachment String? // URL or path to signed document
+  grantedBy        String? // Who granted the consent (patient or representative)
+  witnessedBy      String? // Optional witness reference
+  scope            String? // Scope of the consent (e.g., patient-privacy, research)
+  purpose          String[] // Purpose codes for data use
+  deletedAt        DateTime? // Soft delete timestamp
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  // Relations
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("consents")
 }
