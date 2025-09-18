@@ -1,140 +1,131 @@
+const BaseService = require("../patterns/BaseService");
 const prisma = require("../../prisma/client");
+const {
+  createPractitionerSchema,
+  updatePractitionerSchema,
+} = require("../types/practitioner");
 
-class PractitionerService {
+/**
+ * Practitioner Service that extends BaseService
+ * Implements practitioner-specific business logic using Builder and Fetcher patterns
+ */
+class PractitionerService extends BaseService {
+  constructor() {
+    super("Practitioner", prisma.practitioner, prisma);
+  }
+
+  /**
+   * Create a new practitioner
+   * @param {Object} practitionerData - Practitioner data
+   * @returns {Promise<Object>}
+   */
   async createPractitioner(practitionerData) {
-    const practitioner = await prisma.practitioner.create({
-      data: practitionerData,
+    return await this.create(practitionerData, {
+      validation: createPractitionerSchema,
+      includes: this.getDefaultIncludes(),
     });
-
-    return practitioner;
   }
 
+  /**
+   * Update a practitioner
+   * @param {string} id - Practitioner ID
+   * @param {Object} practitionerData - Updated practitioner data
+   * @returns {Promise<Object>}
+   */
   async updatePractitioner(id, practitionerData) {
-    const practitioner = await prisma.practitioner.update({
-      where: { id },
-      data: practitionerData,
+    return await this.update(id, practitionerData, {
+      validation: updatePractitionerSchema,
+      includes: this.getDefaultIncludes(),
     });
-
-    return practitioner;
   }
 
+  /**
+   * Get practitioner by ID
+   * @param {string} id - Practitioner ID
+   * @returns {Promise<Object|null>}
+   */
   async getPractitionerById(id) {
-    const practitioner = await prisma.practitioner.findUnique({
-      where: { id },
-      include: {
-        requestedTasks: {
-          select: {
-            id: true,
-            externalId: true,
-            code: true,
-            status: true,
-            priority: true,
-          },
-        },
-        ownedTasks: {
-          select: {
-            id: true,
-            externalId: true,
-            code: true,
-            status: true,
-            priority: true,
-          },
-        },
-      },
+    return await this.findById(id, {
+      includes: this.getDefaultIncludes(),
     });
-
-    return practitioner;
   }
 
+  /**
+   * Get practitioner by NPI
+   * @param {string} npi - NPI number
+   * @returns {Promise<Object|null>}
+   */
   async getPractitionerByNPI(npi) {
-    const practitioner = await prisma.practitioner.findUnique({
-      where: { npi },
-      include: {
-        requestedTasks: {
-          select: {
-            id: true,
-            externalId: true,
-            code: true,
-            status: true,
-            priority: true,
-          },
-        },
-        ownedTasks: {
-          select: {
-            id: true,
-            externalId: true,
-            code: true,
-            status: true,
-            priority: true,
-          },
+    return await this.createFetcher()
+      .where({ npi })
+      .include(this.getDefaultIncludes())
+      .findFirst();
+  }
+
+  /**
+   * Get practitioner by email
+   * @param {string} email - Email address
+   * @returns {Promise<Object|null>}
+   */
+  async getPractitionerByEmail(email) {
+    return await this.createFetcher().where({ email }).findFirst();
+  }
+
+  /**
+   * Get all practitioners with filtering and pagination
+   * @param {number} page - Page number
+   * @param {number} limit - Items per page
+   * @param {Object} filters - Filter conditions
+   * @returns {Promise<{practitioners: Array, pagination: Object}>}
+   */
+  async getAllPractitioners(page = 1, limit = 10, filters = {}) {
+    const { active, specialty, organizationId, search } = filters;
+
+    const fetcher = this.createFetcher()
+      .paginate(page, limit)
+      .orderBy(this.getDefaultOrderBy());
+
+    if (active !== undefined) {
+      fetcher.where({ active });
+    }
+
+    if (specialty) {
+      fetcher.where({
+        specialty: { contains: specialty, mode: "insensitive" },
+      });
+    }
+
+    if (organizationId) {
+      fetcher.where({ organizationId });
+    }
+
+    if (search) {
+      fetcher.search(search, this.getDefaultSearchFields());
+    }
+
+    // Include task counts
+    fetcher.include({
+      _count: {
+        select: {
+          requestedTasks: true,
+          ownedTasks: true,
         },
       },
     });
 
-    return practitioner;
-  }
-
-  async getPractitionerByEmail(email) {
-    const practitioner = await prisma.practitioner.findUnique({
-      where: { email },
-    });
-
-    return practitioner;
-  }
-
-  async getAllPractitioners(page = 1, limit = 10, filters = {}) {
-    const skip = (page - 1) * limit;
-    const where = {};
-
-    // Apply filters
-    if (filters.active !== undefined) {
-      where.active = filters.active;
-    }
-    if (filters.specialty) {
-      where.specialty = { contains: filters.specialty, mode: "insensitive" };
-    }
-    if (filters.organizationId) {
-      where.organizationId = filters.organizationId;
-    }
-    if (filters.search) {
-      where.OR = [
-        { firstName: { contains: filters.search, mode: "insensitive" } },
-        { lastName: { contains: filters.search, mode: "insensitive" } },
-        { email: { contains: filters.search, mode: "insensitive" } },
-        { npi: { contains: filters.search, mode: "insensitive" } },
-        { specialty: { contains: filters.search, mode: "insensitive" } },
-      ];
-    }
-
-    const [practitioners, total] = await Promise.all([
-      prisma.practitioner.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-        include: {
-          _count: {
-            select: {
-              requestedTasks: true,
-              ownedTasks: true,
-            },
-          },
-        },
-      }),
-      prisma.practitioner.count({ where }),
-    ]);
+    const result = await fetcher.findMany();
 
     return {
-      practitioners,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
+      practitioners: result.data,
+      pagination: result.pagination,
     };
   }
 
+  /**
+   * Delete practitioner with validation
+   * @param {string} id - Practitioner ID
+   * @returns {Promise<void>}
+   */
   async deletePractitioner(id) {
     // Check if practitioner has active tasks
     const activeTasks = await prisma.task.count({
@@ -154,17 +145,65 @@ class PractitionerService {
     }
 
     // Soft delete by setting active to false
-    await prisma.practitioner.update({
+    await this.prismaModel.update({
       where: { id },
       data: { active: false },
     });
   }
 
+  /**
+   * Restore practitioner
+   * @param {string} id - Practitioner ID
+   * @returns {Promise<void>}
+   */
   async restorePractitioner(id) {
-    await prisma.practitioner.update({
+    await this.prismaModel.update({
       where: { id },
       data: { active: true },
     });
+  }
+
+  /**
+   * Override getDefaultIncludes
+   * @returns {Object}
+   */
+  getDefaultIncludes() {
+    return {
+      requestedTasks: {
+        select: {
+          id: true,
+          externalId: true,
+          code: true,
+          status: true,
+          priority: true,
+        },
+      },
+      ownedTasks: {
+        select: {
+          id: true,
+          externalId: true,
+          code: true,
+          status: true,
+          priority: true,
+        },
+      },
+    };
+  }
+
+  /**
+   * Override getDefaultSearchFields
+   * @returns {Array<string>}
+   */
+  getDefaultSearchFields() {
+    return ["firstName", "lastName", "email", "npi", "specialty"];
+  }
+
+  /**
+   * Override getCollectionName
+   * @returns {string}
+   */
+  getCollectionName() {
+    return "practitioners";
   }
 }
 

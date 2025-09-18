@@ -63,20 +63,36 @@ const createTaskSchema = z
   );
 
 // Update task schema
-const updateTaskSchema = createTaskSchema.partial().refine(
-  (data) => {
-    if (data.executionPeriodStart && data.executionPeriodEnd) {
-      const startTime = new Date(data.executionPeriodStart);
-      const endTime = new Date(data.executionPeriodEnd);
-      return endTime > startTime;
+const updateTaskSchema = z
+  .object({
+    externalId: z.string().optional(),
+    status: TaskStatus.optional(),
+    intent: TaskIntent.optional(),
+    priority: TaskPriority.optional(),
+    code: z.string().min(1, "Task code is required").optional(),
+    description: z.string().optional(),
+    focusId: z.string().optional(),
+    focusType: z.string().optional(),
+    requesterId: z.string().optional(),
+    ownerId: z.string().optional(),
+    executionPeriodStart: z.string().datetime().optional(),
+    executionPeriodEnd: z.string().datetime().optional(),
+    authoredOn: z.string().datetime().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.executionPeriodStart && data.executionPeriodEnd) {
+        const startTime = new Date(data.executionPeriodStart);
+        const endTime = new Date(data.executionPeriodEnd);
+        return endTime > startTime;
+      }
+      return true;
+    },
+    {
+      message: "Execution period end must be after start",
+      path: ["executionPeriodEnd"],
     }
-    return true;
-  },
-  {
-    message: "Execution period end must be after start",
-    path: ["executionPeriodEnd"],
-  }
-);
+  );
 
 // Task response schema
 const taskResponseSchema = z.object({

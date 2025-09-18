@@ -13,8 +13,6 @@ model User {
   password                 String
   firstName                String?
   lastName                 String?
-  middleName               String?
-  phoneNumber              String?
   role                     String         @default("USER")
   isEmailVerified          Boolean        @default(false)
   emailVerificationToken   String?
@@ -22,10 +20,12 @@ model User {
   passwordResetToken       String?
   passwordResetExpires     DateTime?
   lastLogin                DateTime?
-  refreshTokens            RefreshToken[]
-  loginSessions            LoginSession[]
   createdAt                DateTime       @default(now())
   updatedAt                DateTime       @updatedAt
+  middleName               String?
+  phoneNumber              String?
+  loginSessions            LoginSession[]
+  refreshTokens            RefreshToken[]
 
   @@map("users")
 }
@@ -34,9 +34,9 @@ model RefreshToken {
   id        String   @id @default(uuid())
   token     String   @unique
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("refresh_tokens")
 }
@@ -44,14 +44,14 @@ model RefreshToken {
 model LoginSession {
   id        String   @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  jti       String   @unique // JWT ID for tracking
-  iat       DateTime // Issued at time
+  jti       String   @unique
+  iat       DateTime
   ipAddress String?
   userAgent String?
   isActive  Boolean  @default(true)
   expiresAt DateTime
   createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("login_sessions")
 }
@@ -60,7 +60,7 @@ model EmailOTP {
   id        String   @id @default(uuid())
   email     String
   otp       String
-  type      String // 'verification' or 'password_reset'
+  type      String
   expiresAt DateTime
   isUsed    Boolean  @default(false)
   createdAt DateTime @default(now())
@@ -71,7 +71,7 @@ model EmailOTP {
 model OTPAttempt {
   id        String   @id @default(uuid())
   email     String
-  type      String // 'verification' or 'password_reset'
+  type      String
   ipAddress String?
   userAgent String?
   createdAt DateTime @default(now())
@@ -81,7 +81,6 @@ model OTPAttempt {
 
 model Patient {
   id                  String                @id @default(cuid())
-  externalId          String                @unique @default(cuid())
   active              Boolean               @default(true)
   firstName           String
   middleName          String?
@@ -92,13 +91,14 @@ model Patient {
   gender              AdministrativeGender?
   birthDate           DateTime?
   deceased            Boolean?
-  address             Address[]
   maritalStatus       String?
   empi                String?
   generalPractitioner String?
-  deletedAt           DateTime? // Soft delete timestamp
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
+  deletedAt           DateTime?
+  externalId          String                @unique @default(cuid())
+  address             Address[]
   appointments        Appointment[]
   Condition           Condition[]
   Consent             Consent[]
@@ -118,22 +118,13 @@ model Appointment {
   location    String?
   notes       String?
   patientId   String
-  patient     Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
   providerId  String?
-  deletedAt   DateTime? // Soft delete timestamp
+  deletedAt   DateTime?
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
+  patient     Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
   @@map("appointments")
-}
-
-enum AppointmentStatus {
-  scheduled
-  confirmed
-  in_progress
-  completed
-  cancelled
-  no_show
 }
 
 model Identifier {
@@ -142,10 +133,10 @@ model Identifier {
   system           String?
   value            String
   type             String?
-  identifiableId   String // Polymorphic foreign key
-  identifiableType String // Type of the related model (e.g., 'Patient')
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
+  identifiableId   String
+  identifiableType String
 
   @@map("identifiers")
 }
@@ -160,12 +151,12 @@ model Address {
   state           String?
   postalCode      String?
   country         String?
-  addressableId   String // Polymorphic foreign key
-  addressableType String // Type of the related model (e.g., 'Patient')
+  patientId       String?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
+  addressableId   String
+  addressableType String
   Patient         Patient?     @relation(fields: [patientId], references: [id])
-  patientId       String?
 
   @@map("addresses")
 }
@@ -173,13 +164,119 @@ model Address {
 model KeyRotationLog {
   id        String   @id @default(uuid())
   version   String   @unique
-  checksum  String // SHA-256 checksum of the key
+  checksum  String
   rotatedAt DateTime @default(now())
-  rotatedBy String? // System or admin user ID
+  rotatedBy String?
   isActive  Boolean  @default(true)
   expiresAt DateTime
 
   @@map("key_rotation_logs")
+}
+
+model Practitioner {
+  id                 String      @id @default(uuid())
+  firstName          String
+  lastName           String
+  middleName         String?
+  prefix             String?
+  suffix             String?
+  npi                String?     @unique
+  specialty          String?
+  email              String?     @unique
+  phone              String?
+  address            Json?
+  active             Boolean     @default(true)
+  organizationId     String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  recordedConditions Condition[] @relation("ConditionRecorder")
+  ownedTasks         Task[]      @relation("TaskOwner")
+  requestedTasks     Task[]      @relation("TaskRequester")
+
+  @@map("practitioners")
+}
+
+model Task {
+  id                   String        @id @default(uuid())
+  externalId           String        @unique @default(cuid())
+  status               TaskStatus    @default(draft)
+  intent               TaskIntent    @default(unknown)
+  priority             TaskPriority? @default(routine)
+  code                 String
+  description          String?
+  focusId              String?
+  focusType            String?
+  requesterId          String?
+  ownerId              String?
+  executionPeriodStart DateTime?
+  executionPeriodEnd   DateTime?
+  authoredOn           DateTime      @default(now())
+  lastModified         DateTime      @updatedAt
+  deletedAt            DateTime?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  owner                Practitioner? @relation("TaskOwner", fields: [ownerId], references: [id])
+  requester            Practitioner? @relation("TaskRequester", fields: [requesterId], references: [id])
+
+  @@map("tasks")
+}
+
+model Condition {
+  id                 String                      @id @default(uuid())
+  externalId         String                      @unique @default(cuid())
+  clinicalStatus     ConditionClinicalStatus
+  verificationStatus ConditionVerificationStatus
+  category           ConditionCategory?
+  severity           ConditionSeverity?
+  code               String
+  codeSystem         String?
+  codeDisplay        String?
+  subjectId          String
+  encounterId        String?
+  onsetDateTime      DateTime?
+  recordedDate       DateTime                    @default(now())
+  recordedBy         String?
+  notes              String?
+  deletedAt          DateTime?
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+  recorder           Practitioner?               @relation("ConditionRecorder", fields: [recordedBy], references: [id])
+  subject            Patient                     @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@map("conditions")
+}
+
+model Consent {
+  id               String          @id @default(uuid())
+  externalId       String          @unique @default(cuid())
+  status           ConsentStatus
+  category         ConsentCategory
+  patientId        String
+  organizationId   String?
+  dateTime         DateTime        @default(now())
+  periodStart      DateTime?
+  periodEnd        DateTime?
+  provision        Json?
+  sourceAttachment String?
+  grantedBy        String?
+  witnessedBy      String?
+  scope            String?
+  purpose          String[]
+  deletedAt        DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  patient          Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("consents")
+}
+
+enum AppointmentStatus {
+  scheduled
+  confirmed
+  in_progress
+  completed
+  cancelled
+  no_show
 }
 
 enum AdministrativeGender {
@@ -296,108 +393,4 @@ enum ConsentCategory {
   research
   advance_directive
   disclosure
-}
-
-model Practitioner {
-  id             String   @id @default(uuid())
-  firstName      String
-  lastName       String
-  middleName     String?
-  prefix         String?
-  suffix         String?
-  npi            String?  @unique
-  specialty      String?
-  email          String?  @unique
-  phone          String?
-  address        Json?
-  active         Boolean  @default(true)
-  organizationId String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  // Relations
-  requestedTasks     Task[]      @relation("TaskRequester")
-  ownedTasks         Task[]      @relation("TaskOwner")
-  recordedConditions Condition[] @relation("ConditionRecorder")
-
-  @@map("practitioners")
-}
-
-model Task {
-  id                   String        @id @default(uuid())
-  externalId           String        @unique @default(cuid())
-  status               TaskStatus    @default(draft)
-  intent               TaskIntent    @default(unknown)
-  priority             TaskPriority? @default(routine)
-  code                 String
-  description          String?
-  focusId              String? // Polymorphic reference to Patient, Encounter, etc.
-  focusType            String? // Type of the focused resource (e.g., 'Patient', 'Encounter')
-  requesterId          String? // Reference to Practitioner or Organization
-  ownerId              String? // Assigned practitioner or system
-  executionPeriodStart DateTime?
-  executionPeriodEnd   DateTime?
-  authoredOn           DateTime      @default(now())
-  lastModified         DateTime      @updatedAt
-  deletedAt            DateTime? // Soft delete timestamp
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
-
-  // Relations
-  requester Practitioner? @relation("TaskRequester", fields: [requesterId], references: [id])
-  owner     Practitioner? @relation("TaskOwner", fields: [ownerId], references: [id])
-
-  @@map("tasks")
-}
-
-model Condition {
-  id                 String                      @id @default(uuid())
-  externalId         String                      @unique @default(cuid())
-  clinicalStatus     ConditionClinicalStatus
-  verificationStatus ConditionVerificationStatus
-  category           ConditionCategory?
-  severity           ConditionSeverity?
-  code               String // SNOMED or ICD-10 code
-  codeSystem         String? // e.g., "http://snomed.info/sct"
-  codeDisplay        String? // Human readable display name
-  subjectId          String // Foreign key to Patient
-  encounterId        String? // Optional link to Encounter
-  onsetDateTime      DateTime?
-  recordedDate       DateTime                    @default(now())
-  recordedBy         String? // Reference to Practitioner who recorded
-  notes              String? // Additional clinical notes
-  deletedAt          DateTime? // Soft delete timestamp
-  createdAt          DateTime                    @default(now())
-  updatedAt          DateTime                    @updatedAt
-
-  subject  Patient       @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  recorder Practitioner? @relation("ConditionRecorder", fields: [recordedBy], references: [id])
-
-  @@map("conditions")
-}
-
-model Consent {
-  id               String          @id @default(uuid())
-  externalId       String          @unique @default(cuid())
-  status           ConsentStatus
-  category         ConsentCategory
-  patientId        String // Foreign key to Patient
-  organizationId   String? // Optional reference to managing Organization
-  dateTime         DateTime        @default(now())
-  periodStart      DateTime?
-  periodEnd        DateTime?
-  provision        Json? // Rules about permitted/denied actions
-  sourceAttachment String? // URL or path to signed document
-  grantedBy        String? // Who granted the consent (patient or representative)
-  witnessedBy      String? // Optional witness reference
-  scope            String? // Scope of the consent (e.g., patient-privacy, research)
-  purpose          String[] // Purpose codes for data use
-  deletedAt        DateTime? // Soft delete timestamp
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-
-  // Relations
-  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
-
-  @@map("consents")
 }

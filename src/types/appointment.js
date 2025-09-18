@@ -38,20 +38,34 @@ const createAppointmentSchema = z
   );
 
 // Update appointment schema
-const updateAppointmentSchema = createAppointmentSchema.partial().refine(
-  (data) => {
-    if (data.startTime && data.endTime) {
-      const startTime = new Date(data.startTime);
-      const endTime = new Date(data.endTime);
-      return endTime > startTime;
+const updateAppointmentSchema = z
+  .object({
+    externalId: z.string().optional(),
+    title: z.string().min(1, "Title is required").optional(),
+    description: z.string().optional(),
+    startTime: z.string().datetime("Invalid start time format").optional(),
+    endTime: z.string().datetime("Invalid end time format").optional(),
+    status: AppointmentStatus.default("scheduled").optional(),
+    type: z.string().optional(),
+    location: z.string().optional(),
+    notes: z.string().optional(),
+    patientId: z.string().min(1, "Patient ID is required").optional(),
+    providerId: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.startTime && data.endTime) {
+        const startTime = new Date(data.startTime);
+        const endTime = new Date(data.endTime);
+        return endTime > startTime;
+      }
+      return true;
+    },
+    {
+      message: "End time must be after start time",
+      path: ["endTime"],
     }
-    return true;
-  },
-  {
-    message: "End time must be after start time",
-    path: ["endTime"],
-  }
-);
+  );
 
 // Appointment response schema
 const appointmentResponseSchema = z.object({

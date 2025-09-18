@@ -1,316 +1,186 @@
+const BaseService = require("../patterns/BaseService");
 const prisma = require("../../prisma/client");
-const { generatePrefixedExternalId } = require("../utils/externalId");
+const {
+  createConditionSchema,
+  updateConditionSchema,
+} = require("../types/condition");
 
-class ConditionService {
+/**
+ * Condition Service that extends BaseService
+ * Implements condition-specific business logic using Builder and Fetcher patterns
+ */
+class ConditionService extends BaseService {
+  constructor() {
+    super("Condition", prisma.condition, prisma);
+  }
+
+  /**
+   * Create a new condition
+   * @param {Object} conditionData - Condition data
+   * @returns {Promise<Object>}
+   */
   async createCondition(conditionData) {
-    const { onsetDateTime, recordedDate, ...conditionFields } = conditionData;
-
-    // Generate external ID if not provided
-    if (!conditionFields.externalId) {
-      conditionFields.externalId = generatePrefixedExternalId("cond");
-    }
-
-    // Convert string dates to Date objects
-    const conditionWithDates = {
-      ...conditionFields,
-      onsetDateTime: onsetDateTime ? new Date(onsetDateTime) : null,
-      recordedDate: recordedDate ? new Date(recordedDate) : new Date(),
-    };
-
-    const condition = await prisma.condition.create({
-      data: conditionWithDates,
-      include: {
-        subject: {
-          select: {
-            id: true,
-            externalId: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-        recorder: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            specialty: true,
-          },
-        },
-      },
+    return await this.create(conditionData, {
+      validation: createConditionSchema,
+      externalIdPrefix: "cond",
+      dateFields: ["onsetDateTime", "recordedDate"],
+      includes: this.getDefaultIncludes(),
     });
-
-    return condition;
   }
 
+  /**
+   * Update a condition
+   * @param {string} id - Condition ID
+   * @param {Object} conditionData - Updated condition data
+   * @returns {Promise<Object>}
+   */
   async updateCondition(id, conditionData) {
-    const { onsetDateTime, recordedDate, ...conditionFields } = conditionData;
-
-    const updateData = { ...conditionFields };
-
-    if (onsetDateTime) {
-      updateData.onsetDateTime = new Date(onsetDateTime);
-    }
-
-    if (recordedDate) {
-      updateData.recordedDate = new Date(recordedDate);
-    }
-
-    const condition = await prisma.condition.update({
-      where: { id },
-      data: updateData,
-      include: {
-        subject: {
-          select: {
-            id: true,
-            externalId: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-        recorder: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            specialty: true,
-          },
-        },
-      },
+    return await this.update(id, conditionData, {
+      validation: updateConditionSchema,
+      dateFields: ["onsetDateTime", "recordedDate"],
+      includes: this.getDefaultIncludes(),
     });
-
-    return condition;
   }
 
+  /**
+   * Get condition by ID
+   * @param {string} id - Condition ID
+   * @returns {Promise<Object|null>}
+   */
   async getConditionById(id) {
-    const condition = await prisma.condition.findFirst({
-      where: {
-        id,
-        deletedAt: null, // Only get non-deleted conditions
-      },
-      include: {
-        subject: {
-          select: {
-            id: true,
-            externalId: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-        recorder: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            specialty: true,
-          },
-        },
-      },
+    return await this.findById(id, {
+      includes: this.getDefaultIncludes(),
     });
-
-    return condition;
   }
 
+  /**
+   * Get condition by external ID
+   * @param {string} externalId - External ID
+   * @returns {Promise<Object|null>}
+   */
   async getConditionByExternalId(externalId) {
-    const condition = await prisma.condition.findFirst({
-      where: {
-        externalId,
-        deletedAt: null,
-      },
-      include: {
-        subject: {
-          select: {
-            id: true,
-            externalId: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-        recorder: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            specialty: true,
-          },
-        },
-      },
+    return await this.findByExternalId(externalId, {
+      includes: this.getDefaultIncludes(),
     });
-
-    return condition;
   }
 
+  /**
+   * Get all conditions with filtering and pagination
+   * @param {number} page - Page number
+   * @param {number} limit - Items per page
+   * @param {Object} filters - Filter conditions
+   * @returns {Promise<{conditions: Array, pagination: Object}>}
+   */
   async getAllConditions(page = 1, limit = 10, filters = {}) {
-    const skip = (page - 1) * limit;
-    const where = {
-      deletedAt: null, // Only get non-deleted conditions
-    };
+    const {
+      clinicalStatus,
+      verificationStatus,
+      category,
+      severity,
+      subjectId,
+      encounterId,
+      recordedBy,
+      onsetStart,
+      onsetEnd,
+      search,
+    } = filters;
+
+    const fetcher = this.createFetcher()
+      .excludeDeleted()
+      .paginate(page, limit)
+      .orderBy({ recordedDate: "desc" })
+      .include(this.getDefaultIncludes());
 
     // Apply filters
-    if (filters.clinicalStatus) {
-      where.clinicalStatus = filters.clinicalStatus;
+    if (clinicalStatus) fetcher.where({ clinicalStatus });
+    if (verificationStatus) fetcher.where({ verificationStatus });
+    if (category) fetcher.where({ category });
+    if (severity) fetcher.where({ severity });
+    if (subjectId) fetcher.where({ subjectId });
+    if (encounterId) fetcher.where({ encounterId });
+    if (recordedBy) fetcher.where({ recordedBy });
+
+    // Date range filter for onset
+    if (onsetStart || onsetEnd) {
+      fetcher.dateRange("onsetDateTime", onsetStart, onsetEnd);
     }
 
-    if (filters.verificationStatus) {
-      where.verificationStatus = filters.verificationStatus;
-    }
-
-    if (filters.category) {
-      where.category = filters.category;
-    }
-
-    if (filters.severity) {
-      where.severity = filters.severity;
-    }
-
-    if (filters.subjectId) {
-      where.subjectId = filters.subjectId;
-    }
-
-    if (filters.encounterId) {
-      where.encounterId = filters.encounterId;
-    }
-
-    if (filters.recordedBy) {
-      where.recordedBy = filters.recordedBy;
-    }
-
-    if (filters.onsetStart && filters.onsetEnd) {
-      where.onsetDateTime = {
-        gte: new Date(filters.onsetStart),
-        lte: new Date(filters.onsetEnd),
-      };
-    } else if (filters.onsetStart) {
-      where.onsetDateTime = {
-        gte: new Date(filters.onsetStart),
-      };
-    } else if (filters.onsetEnd) {
-      where.onsetDateTime = {
-        lte: new Date(filters.onsetEnd),
-      };
-    }
-
-    if (filters.search) {
-      where.OR = [
-        { code: { contains: filters.search, mode: "insensitive" } },
-        { codeDisplay: { contains: filters.search, mode: "insensitive" } },
-        { notes: { contains: filters.search, mode: "insensitive" } },
-        { externalId: { contains: filters.search, mode: "insensitive" } },
-        {
-          subject: {
-            OR: [
-              { firstName: { contains: filters.search, mode: "insensitive" } },
-              { lastName: { contains: filters.search, mode: "insensitive" } },
-            ],
-          },
-        },
-      ];
-    }
-
-    const [conditions, total] = await Promise.all([
-      prisma.condition.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { recordedDate: "desc" },
-        include: {
-          subject: {
-            select: {
-              id: true,
-              externalId: true,
-              firstName: true,
-              lastName: true,
+    // Search functionality
+    if (search) {
+      fetcher.where({
+        OR: [
+          { code: { contains: search, mode: "insensitive" } },
+          { codeDisplay: { contains: search, mode: "insensitive" } },
+          { notes: { contains: search, mode: "insensitive" } },
+          { externalId: { contains: search, mode: "insensitive" } },
+          {
+            subject: {
+              OR: [
+                { firstName: { contains: search, mode: "insensitive" } },
+                { lastName: { contains: search, mode: "insensitive" } },
+              ],
             },
           },
-          recorder: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              specialty: true,
-            },
-          },
-        },
-      }),
-      prisma.condition.count({ where }),
-    ]);
+        ],
+      });
+    }
+
+    const result = await fetcher.findMany();
 
     return {
-      conditions,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
+      conditions: result.data,
+      pagination: result.pagination,
     };
   }
 
+  /**
+   * Get patient conditions
+   * @param {string} patientId - Patient ID
+   * @param {number} page - Page number
+   * @param {number} limit - Items per page
+   * @returns {Promise<{conditions: Array, pagination: Object}>}
+   */
   async getPatientConditions(patientId, page = 1, limit = 10) {
-    const skip = (page - 1) * limit;
-    const where = {
-      subjectId: patientId,
-      deletedAt: null,
-    };
+    const fetcher = this.createFetcher()
+      .excludeDeleted()
+      .where({ subjectId: patientId })
+      .paginate(page, limit)
+      .orderBy({ recordedDate: "desc" })
+      .include(this.getDefaultIncludes());
 
-    const [conditions, total] = await Promise.all([
-      prisma.condition.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { recordedDate: "desc" },
-        include: {
-          subject: {
-            select: {
-              id: true,
-              externalId: true,
-              firstName: true,
-              lastName: true,
-            },
-          },
-          recorder: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              specialty: true,
-            },
-          },
-        },
-      }),
-      prisma.condition.count({ where }),
-    ]);
+    const result = await fetcher.findMany();
 
     return {
-      conditions,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
+      conditions: result.data,
+      pagination: result.pagination,
     };
   }
 
+  /**
+   * Delete condition (soft delete)
+   * @param {string} id - Condition ID
+   * @returns {Promise<void>}
+   */
   async deleteCondition(id) {
-    // Soft delete - set deletedAt timestamp
-    await prisma.condition.update({
-      where: { id },
-      data: {
-        deletedAt: new Date(),
-      },
-    });
+    await this.softDelete(id);
   }
 
+  /**
+   * Restore condition
+   * @param {string} id - Condition ID
+   * @returns {Promise<void>}
+   */
   async restoreCondition(id) {
-    // Restore soft deleted condition
-    await prisma.condition.update({
-      where: { id },
-      data: {
-        deletedAt: null,
-      },
-    });
+    await this.restore(id);
   }
 
+  /**
+   * Update condition status
+   * @param {string} id - Condition ID
+   * @param {string} clinicalStatus - Clinical status
+   * @param {string} verificationStatus - Verification status (optional)
+   * @returns {Promise<Object>}
+   */
   async updateConditionStatus(id, clinicalStatus, verificationStatus = null) {
     const updateData = {
       clinicalStatus,
@@ -320,30 +190,52 @@ class ConditionService {
       updateData.verificationStatus = verificationStatus;
     }
 
-    const condition = await prisma.condition.update({
+    return await this.prismaModel.update({
       where: { id },
       data: updateData,
-      include: {
-        subject: {
-          select: {
-            id: true,
-            externalId: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-        recorder: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            specialty: true,
-          },
+      include: this.getDefaultIncludes(),
+    });
+  }
+
+  /**
+   * Override getDefaultIncludes
+   * @returns {Object}
+   */
+  getDefaultIncludes() {
+    return {
+      subject: {
+        select: {
+          id: true,
+          externalId: true,
+          firstName: true,
+          lastName: true,
         },
       },
-    });
+      recorder: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          specialty: true,
+        },
+      },
+    };
+  }
 
-    return condition;
+  /**
+   * Override getDefaultSearchFields
+   * @returns {Array<string>}
+   */
+  getDefaultSearchFields() {
+    return ["code", "codeDisplay", "notes", "externalId"];
+  }
+
+  /**
+   * Override getCollectionName
+   * @returns {string}
+   */
+  getCollectionName() {
+    return "conditions";
   }
 }
 

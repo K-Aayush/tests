@@ -1,64 +1,80 @@
+const BaseService = require("../patterns/BaseService");
+const PatientBuilder = require("../patterns/PatientBuilder");
+const PatientFetcher = require("../patterns/PatientFetcher");
 const prisma = require("../../prisma/client");
-const { generatePrefixedExternalId } = require("../utils/externalId");
+const {
+  createPatientSchema,
+  updatePatientSchema,
+} = require("../types/patient");
 
-class PatientService {
+/**
+ * Patient Service that extends BaseService
+ * Implements patient-specific business logic using Builder and Fetcher patterns
+ */
+class PatientService extends BaseService {
+  constructor() {
+    super("Patient", prisma.patient, prisma);
+  }
+
+  /**
+   * Override createBuilder to return PatientBuilder
+   * @returns {PatientBuilder}
+   */
+  createBuilder() {
+    return new PatientBuilder();
+  }
+
+  /**
+   * Override createFetcher to return PatientFetcher
+   * @returns {PatientFetcher}
+   */
+  createFetcher() {
+    return new PatientFetcher();
+  }
+
+  /**
+   * Create a new patient
+   * @param {Object} patientData - Patient data
+   * @returns {Promise<Object>}
+   */
   async createPatient(patientData) {
     const { identifier, address, ...patientFields } = patientData;
 
-    // Generate external ID if not provided
-    if (!patientFields.externalId) {
-      patientFields.externalId = generatePrefixedExternalId("pat");
-    }
+    const builder = this.createBuilder()
+      .withData(patientFields)
+      .withValidation(createPatientSchema)
+      .withExternalId("pat")
+      .withIdentifiers(identifier)
+      .withAddresses(address);
 
-    if (patientFields.birthDate) {
-      patientFields.birthDate = new Date(patientFields.birthDate);
-    }
-
-    const patient = await prisma.patient.create({
-      data: patientFields,
-    });
-
-    // Create identifiers with polymorphic relation
-    if (identifier && identifier.length > 0) {
-      await prisma.identifier.createMany({
-        data: identifier.map((id) => ({
-          ...id,
-          identifiableId: patient.id,
-          identifiableType: "Patient",
-        })),
-      });
-    }
-
-    // Create addresses with polymorphic relation
-    if (address && address.length > 0) {
-      await prisma.address.createMany({
-        data: address.map((addr) => ({
-          ...addr,
-          addressableId: patient.id,
-          addressableType: "Patient",
-        })),
-      });
-    }
-
-    return this.getPatientById(patient.id);
+    return await builder.build();
   }
 
+  /**
+   * Update a patient
+   * @param {string} id - Patient ID
+   * @param {Object} patientData - Updated patient data
+   * @returns {Promise<Object>}
+   */
   async updatePatient(id, patientData) {
     const { identifier, address, ...patientFields } = patientData;
 
+    // Validate the update data
+    updatePatientSchema.parse(patientData);
+
+    // Transform birthDate if present
     if (patientFields.birthDate) {
       patientFields.birthDate = new Date(patientFields.birthDate);
     }
 
     // Update patient data
-    const patient = await prisma.patient.update({
+    const patient = await this.prismaModel.update({
       where: { id },
       data: patientFields,
     });
 
     // Update identifiers if provided
     if (identifier) {
-      // Delete existing identifiers
       await prisma.identifier.deleteMany({
         where: {
           identifiableId: id,
@@ -66,7 +82,6 @@ class PatientService {
         },
       });
 
-      // Create new identifiers
       if (identifier.length > 0) {
         await prisma.identifier.createMany({
           data: identifier.map((id) => ({
@@ -80,7 +95,6 @@ class PatientService {
 
     // Update addresses if provided
     if (address) {
-      // Delete existing addresses
       await prisma.address.deleteMany({
         where: {
           addressableId: id,
@@ -88,7 +102,6 @@ class PatientService {
         },
       });
 
-      // Create new addresses
       if (address.length > 0) {
         await prisma.address.createMany({
           data: address.map((addr) => ({
@@ -100,148 +113,71 @@ class PatientService {
       }
     }
 
-    return this.getPatientById(patient.id);
+    return await this.getPatientById(patient.id);
   }
 
+  /**
+   * Get patient by ID
+   * @param {string} id - Patient ID
+   * @returns {Promise<Object|null>}
+   */
   async getPatientById(id) {
-    const patient = await prisma.patient.findFirst({
-      where: {
-        id,
-        deletedAt: null, // Only get non-deleted patients
-      },
-    });
-
-    if (!patient) return null;
-
-    // Get identifiers and addresses separately due to polymorphic relations
-    const [identifiers, addresses] = await Promise.all([
-      prisma.identifier.findMany({
-        where: {
-          identifiableId: id,
-          identifiableType: "Patient",
-        },
-      }),
-      prisma.address.findMany({
-        where: {
-          addressableId: id,
-          addressableType: "Patient",
-        },
-      }),
-    ]);
-
-    return {
-      ...patient,
-      identifier: identifiers,
-      address: addresses,
-    };
+    return await this.createFetcher().excludeDeleted().findById(id);
   }
 
+  /**
+   * Get patient by external ID
+   * @param {string} externalId - External ID
+   * @returns {Promise<Object|null>}
+   */
   async getPatientByExternalId(externalId) {
-    const patient = await prisma.patient.findFirst({
-      where: {
-        externalId,
-        deletedAt: null,
-      },
-    });
-
-    if (!patient) return null;
-
-    // Get identifiers and addresses separately due to polymorphic relations
-    const [identifiers, addresses] = await Promise.all([
-      prisma.identifier.findMany({
-        where: {
-          identifiableId: patient.id,
-          identifiableType: "Patient",
-        },
-      }),
-      prisma.address.findMany({
-        where: {
-          addressableId: patient.id,
-          addressableType: "Patient",
-        },
-      }),
-    ]);
-
-    return {
-      ...patient,
-      identifier: identifiers,
-      address: addresses,
-    };
+    return await this.createFetcher()
+      .excludeDeleted()
+      .findByExternalId(externalId);
   }
 
+  /**
+   * Get all patients with filtering and pagination
+   * @param {number} page - Page number
+   * @param {number} limit - Items per page
+   * @param {Object} filters - Filter conditions
+   * @returns {Promise<{patients: Array, pagination: Object}>}
+   */
   async getAllPatients(page = 1, limit = 10, filters = {}) {
-    const skip = (page - 1) * limit;
-    const where = {
-      deletedAt: null, // Only get non-deleted patients
-    };
+    const { active, gender, search } = filters;
 
-    // Apply filters
-    if (filters.active !== undefined) {
-      where.active = filters.active;
-    }
-    if (filters.gender) {
-      where.gender = filters.gender;
-    }
-    if (filters.search) {
-      where.OR = [
-        { firstName: { contains: filters.search, mode: "insensitive" } },
-        { lastName: { contains: filters.search, mode: "insensitive" } },
-        { preferredName: { contains: filters.search, mode: "insensitive" } },
-        { empi: { contains: filters.search, mode: "insensitive" } },
-        { externalId: { contains: filters.search, mode: "insensitive" } },
-      ];
+    const fetcher = this.createFetcher()
+      .excludeDeleted()
+      .paginate(page, limit)
+      .orderBy({ createdAt: "desc" });
+
+    if (active !== undefined) {
+      fetcher.filterByActive(active);
     }
 
-    const [patients, total] = await Promise.all([
-      prisma.patient.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-      }),
-      prisma.patient.count({ where }),
-    ]);
+    if (gender) {
+      fetcher.filterByGender(gender);
+    }
 
-    // Get identifiers and addresses for each patient
-    const patientsWithRelations = await Promise.all(
-      patients.map(async (patient) => {
-        const [identifiers, addresses] = await Promise.all([
-          prisma.identifier.findMany({
-            where: {
-              identifiableId: patient.id,
-              identifiableType: "Patient",
-            },
-          }),
-          prisma.address.findMany({
-            where: {
-              addressableId: patient.id,
-              addressableType: "Patient",
-            },
-          }),
-        ]);
+    if (search) {
+      fetcher.searchPatients(search);
+    }
 
-        return {
-          ...patient,
-          identifier: identifiers,
-          address: addresses,
-        };
-      })
-    );
+    const result = await fetcher.findMany();
 
     return {
-      patients: patientsWithRelations,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
+      patients: result.data,
+      pagination: result.pagination,
     };
   }
 
+  /**
+   * Delete patient (soft delete)
+   * @param {string} id - Patient ID
+   * @returns {Promise<void>}
+   */
   async deletePatient(id) {
-    // Soft delete - set deletedAt timestamp
-    await prisma.patient.update({
+    await this.prismaModel.update({
       where: { id },
       data: {
         deletedAt: new Date(),
@@ -250,9 +186,13 @@ class PatientService {
     });
   }
 
+  /**
+   * Restore patient
+   * @param {string} id - Patient ID
+   * @returns {Promise<void>}
+   */
   async restorePatient(id) {
-    // Restore soft deleted patient
-    await prisma.patient.update({
+    await this.prismaModel.update({
       where: { id },
       data: {
         deletedAt: null,
@@ -261,8 +201,12 @@ class PatientService {
     });
   }
 
+  /**
+   * Permanently delete patient (hard delete)
+   * @param {string} id - Patient ID
+   * @returns {Promise<void>}
+   */
   async permanentlyDeletePatient(id) {
-    // Hard delete - only for admin use
     await prisma.$transaction([
       prisma.identifier.deleteMany({
         where: {
@@ -280,6 +224,14 @@ class PatientService {
         where: { id },
       }),
     ]);
+  }
+
+  /**
+   * Override getDefaultSearchFields
+   * @returns {Array<string>}
+   */
+  getDefaultSearchFields() {
+    return ["firstName", "lastName", "preferredName", "empi", "externalId"];
   }
 }
 

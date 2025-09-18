@@ -1,336 +1,271 @@
+const BaseService = require("../patterns/BaseService");
 const prisma = require("../../prisma/client");
-const { generatePrefixedExternalId } = require("../utils/externalId");
+const {
+  createConsentSchema,
+  updateConsentSchema,
+} = require("../types/consent");
 
-class ConsentService {
+/**
+ * Consent Service that extends BaseService
+ * Implements consent-specific business logic using Builder and Fetcher patterns
+ */
+class ConsentService extends BaseService {
+  constructor() {
+    super("Consent", prisma.consent, prisma);
+  }
+
+  /**
+   * Create a new consent
+   * @param {Object} consentData - Consent data
+   * @returns {Promise<Object>}
+   */
   async createConsent(consentData) {
-    const { dateTime, periodStart, periodEnd, ...consentFields } = consentData;
-
-    // Generate external ID if not provided
-    if (!consentFields.externalId) {
-      consentFields.externalId = generatePrefixedExternalId("consent");
-    }
-
-    // Convert string dates to Date objects
-    const consentWithDates = {
-      ...consentFields,
-      dateTime: dateTime ? new Date(dateTime) : new Date(),
-      periodStart: periodStart ? new Date(periodStart) : null,
-      periodEnd: periodEnd ? new Date(periodEnd) : null,
-    };
-
-    const consent = await prisma.consent.create({
-      data: consentWithDates,
-      include: {
-        patient: {
-          select: {
-            id: true,
-            externalId: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-      },
+    return await this.create(consentData, {
+      validation: createConsentSchema,
+      externalIdPrefix: "consent",
+      dateFields: ["dateTime", "periodStart", "periodEnd"],
+      includes: this.getDefaultIncludes(),
     });
-
-    return consent;
   }
 
+  /**
+   * Update a consent
+   * @param {string} id - Consent ID
+   * @param {Object} consentData - Updated consent data
+   * @returns {Promise<Object>}
+   */
   async updateConsent(id, consentData) {
-    const { dateTime, periodStart, periodEnd, ...consentFields } = consentData;
-
-    const updateData = { ...consentFields };
-
-    if (dateTime) {
-      updateData.dateTime = new Date(dateTime);
-    }
-
-    if (periodStart) {
-      updateData.periodStart = new Date(periodStart);
-    }
-
-    if (periodEnd) {
-      updateData.periodEnd = new Date(periodEnd);
-    }
-
-    const consent = await prisma.consent.update({
-      where: { id },
-      data: updateData,
-      include: {
-        patient: {
-          select: {
-            id: true,
-            externalId: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-      },
+    return await this.update(id, consentData, {
+      validation: updateConsentSchema,
+      dateFields: ["dateTime", "periodStart", "periodEnd"],
+      includes: this.getDefaultIncludes(),
     });
-
-    return consent;
   }
 
+  /**
+   * Get consent by ID
+   * @param {string} id - Consent ID
+   * @returns {Promise<Object|null>}
+   */
   async getConsentById(id) {
-    const consent = await prisma.consent.findFirst({
-      where: {
-        id,
-        deletedAt: null, // Only get non-deleted consents
-      },
-      include: {
-        patient: {
-          select: {
-            id: true,
-            externalId: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-      },
+    return await this.findById(id, {
+      includes: this.getDefaultIncludes(),
     });
-
-    return consent;
   }
 
+  /**
+   * Get consent by external ID
+   * @param {string} externalId - External ID
+   * @returns {Promise<Object|null>}
+   */
   async getConsentByExternalId(externalId) {
-    const consent = await prisma.consent.findFirst({
-      where: {
-        externalId,
-        deletedAt: null,
-      },
-      include: {
-        patient: {
-          select: {
-            id: true,
-            externalId: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-      },
+    return await this.findByExternalId(externalId, {
+      includes: this.getDefaultIncludes(),
     });
-
-    return consent;
   }
 
+  /**
+   * Get all consents with filtering and pagination
+   * @param {number} page - Page number
+   * @param {number} limit - Items per page
+   * @param {Object} filters - Filter conditions
+   * @returns {Promise<{consents: Array, pagination: Object}>}
+   */
   async getAllConsents(page = 1, limit = 10, filters = {}) {
-    const skip = (page - 1) * limit;
-    const where = {
-      deletedAt: null, // Only get non-deleted consents
-    };
+    const {
+      status,
+      category,
+      patientId,
+      organizationId,
+      scope,
+      dateTimeStart,
+      dateTimeEnd,
+      search,
+    } = filters;
+
+    const fetcher = this.createFetcher()
+      .excludeDeleted()
+      .paginate(page, limit)
+      .orderBy({ dateTime: "desc" })
+      .include(this.getDefaultIncludes());
 
     // Apply filters
-    if (filters.status) {
-      where.status = filters.status;
+    if (status) fetcher.where({ status });
+    if (category) fetcher.where({ category });
+    if (patientId) fetcher.where({ patientId });
+    if (organizationId) fetcher.where({ organizationId });
+    if (scope)
+      fetcher.where({ scope: { contains: scope, mode: "insensitive" } });
+
+    // Date range filter
+    if (dateTimeStart || dateTimeEnd) {
+      fetcher.dateRange("dateTime", dateTimeStart, dateTimeEnd);
     }
 
-    if (filters.category) {
-      where.category = filters.category;
-    }
-
-    if (filters.patientId) {
-      where.patientId = filters.patientId;
-    }
-
-    if (filters.organizationId) {
-      where.organizationId = filters.organizationId;
-    }
-
-    if (filters.scope) {
-      where.scope = { contains: filters.scope, mode: "insensitive" };
-    }
-
-    if (filters.dateTimeStart && filters.dateTimeEnd) {
-      where.dateTime = {
-        gte: new Date(filters.dateTimeStart),
-        lte: new Date(filters.dateTimeEnd),
-      };
-    } else if (filters.dateTimeStart) {
-      where.dateTime = {
-        gte: new Date(filters.dateTimeStart),
-      };
-    } else if (filters.dateTimeEnd) {
-      where.dateTime = {
-        lte: new Date(filters.dateTimeEnd),
-      };
-    }
-
-    if (filters.search) {
-      where.OR = [
-        { scope: { contains: filters.search, mode: "insensitive" } },
-        { grantedBy: { contains: filters.search, mode: "insensitive" } },
-        { externalId: { contains: filters.search, mode: "insensitive" } },
-        {
-          patient: {
-            OR: [
-              { firstName: { contains: filters.search, mode: "insensitive" } },
-              { lastName: { contains: filters.search, mode: "insensitive" } },
-            ],
-          },
-        },
-      ];
-    }
-
-    const [consents, total] = await Promise.all([
-      prisma.consent.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { dateTime: "desc" },
-        include: {
-          patient: {
-            select: {
-              id: true,
-              externalId: true,
-              firstName: true,
-              lastName: true,
+    // Search functionality
+    if (search) {
+      fetcher.where({
+        OR: [
+          { scope: { contains: search, mode: "insensitive" } },
+          { grantedBy: { contains: search, mode: "insensitive" } },
+          { externalId: { contains: search, mode: "insensitive" } },
+          {
+            patient: {
+              OR: [
+                { firstName: { contains: search, mode: "insensitive" } },
+                { lastName: { contains: search, mode: "insensitive" } },
+              ],
             },
           },
-        },
-      }),
-      prisma.consent.count({ where }),
-    ]);
+        ],
+      });
+    }
+
+    const result = await fetcher.findMany();
 
     return {
-      consents,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
+      consents: result.data,
+      pagination: result.pagination,
     };
   }
 
+  /**
+   * Get patient consents
+   * @param {string} patientId - Patient ID
+   * @param {number} page - Page number
+   * @param {number} limit - Items per page
+   * @returns {Promise<{consents: Array, pagination: Object}>}
+   */
   async getPatientConsents(patientId, page = 1, limit = 10) {
-    const skip = (page - 1) * limit;
-    const where = {
-      patientId,
-      deletedAt: null,
-    };
+    const fetcher = this.createFetcher()
+      .excludeDeleted()
+      .where({ patientId })
+      .paginate(page, limit)
+      .orderBy({ dateTime: "desc" })
+      .include(this.getDefaultIncludes());
 
-    const [consents, total] = await Promise.all([
-      prisma.consent.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { dateTime: "desc" },
-        include: {
-          patient: {
-            select: {
-              id: true,
-              externalId: true,
-              firstName: true,
-              lastName: true,
-            },
-          },
-        },
-      }),
-      prisma.consent.count({ where }),
-    ]);
+    const result = await fetcher.findMany();
 
     return {
-      consents,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
+      consents: result.data,
+      pagination: result.pagination,
     };
   }
 
+  /**
+   * Delete consent (soft delete)
+   * @param {string} id - Consent ID
+   * @returns {Promise<void>}
+   */
   async deleteConsent(id) {
-    // Soft delete - set deletedAt timestamp
-    await prisma.consent.update({
-      where: { id },
-      data: {
-        deletedAt: new Date(),
-      },
-    });
+    await this.softDelete(id);
   }
 
+  /**
+   * Restore consent
+   * @param {string} id - Consent ID
+   * @returns {Promise<void>}
+   */
   async restoreConsent(id) {
-    // Restore soft deleted consent
-    await prisma.consent.update({
-      where: { id },
-      data: {
-        deletedAt: null,
-      },
-    });
+    await this.restore(id);
   }
 
+  /**
+   * Update consent status
+   * @param {string} id - Consent ID
+   * @param {string} status - New status
+   * @returns {Promise<Object>}
+   */
   async updateConsentStatus(id, status) {
-    const consent = await prisma.consent.update({
+    return await this.prismaModel.update({
       where: { id },
-      data: {
-        status,
-      },
-      include: {
-        patient: {
-          select: {
-            id: true,
-            externalId: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-      },
+      data: { status },
+      include: this.getDefaultIncludes(),
     });
-
-    return consent;
   }
 
+  /**
+   * Get active consents for patient
+   * @param {string} patientId - Patient ID
+   * @param {string} category - Category filter (optional)
+   * @returns {Promise<Array>}
+   */
   async getActiveConsentsForPatient(patientId, category = null) {
-    const where = {
-      patientId,
-      status: "active",
-      deletedAt: null,
-      OR: [{ periodEnd: null }, { periodEnd: { gte: new Date() } }],
-    };
+    const fetcher = this.createFetcher()
+      .excludeDeleted()
+      .where({
+        patientId,
+        status: "active",
+        OR: [{ periodEnd: null }, { periodEnd: { gte: new Date() } }],
+      })
+      .orderBy({ dateTime: "desc" })
+      .include(this.getDefaultIncludes());
 
     if (category) {
-      where.category = category;
+      fetcher.where({ category });
     }
 
-    const consents = await prisma.consent.findMany({
-      where,
-      orderBy: { dateTime: "desc" },
-      include: {
-        patient: {
-          select: {
-            id: true,
-            externalId: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-      },
-    });
-
-    return consents;
+    const result = await fetcher.findMany();
+    return result.data;
   }
 
+  /**
+   * Check consent for specific purpose
+   * @param {string} patientId - Patient ID
+   * @param {string} purpose - Purpose to check
+   * @param {string} category - Category filter (optional)
+   * @returns {Promise<boolean>}
+   */
   async checkConsentForPurpose(patientId, purpose, category = null) {
-    const where = {
-      patientId,
-      status: "active",
-      deletedAt: null,
-      purpose: {
-        has: purpose,
-      },
-      OR: [{ periodEnd: null }, { periodEnd: { gte: new Date() } }],
-    };
+    const fetcher = this.createFetcher()
+      .excludeDeleted()
+      .where({
+        patientId,
+        status: "active",
+        purpose: { has: purpose },
+        OR: [{ periodEnd: null }, { periodEnd: { gte: new Date() } }],
+      })
+      .orderBy({ dateTime: "desc" });
 
     if (category) {
-      where.category = category;
+      fetcher.where({ category });
     }
 
-    const consent = await prisma.consent.findFirst({
-      where,
-      orderBy: { dateTime: "desc" },
-    });
-
+    const consent = await fetcher.findFirst();
     return !!consent;
+  }
+
+  /**
+   * Override getDefaultIncludes
+   * @returns {Object}
+   */
+  getDefaultIncludes() {
+    return {
+      patient: {
+        select: {
+          id: true,
+          externalId: true,
+          firstName: true,
+          lastName: true,
+        },
+      },
+    };
+  }
+
+  /**
+   * Override getDefaultSearchFields
+   * @returns {Array<string>}
+   */
+  getDefaultSearchFields() {
+    return ["scope", "grantedBy", "externalId"];
+  }
+
+  /**
+   * Override getCollectionName
+   * @returns {string}
+   */
+  getCollectionName() {
+    return "consents";
   }
 }
 

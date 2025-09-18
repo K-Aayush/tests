@@ -1,342 +1,192 @@
+const BaseService = require("../patterns/BaseService");
 const prisma = require("../../prisma/client");
-const { generatePrefixedExternalId } = require("../utils/externalId");
+const { createTaskSchema, updateTaskSchema } = require("../types/tasks");
 
-class TaskService {
+/**
+ * Task Service that extends BaseService
+ * Implements task-specific business logic using Builder and Fetcher patterns
+ */
+class TaskService extends BaseService {
+  constructor() {
+    super("Task", prisma.task, prisma);
+  }
+
+  /**
+   * Create a new task
+   * @param {Object} taskData - Task data
+   * @returns {Promise<Object>}
+   */
   async createTask(taskData) {
-    const {
-      executionPeriodStart,
-      executionPeriodEnd,
-      authoredOn,
-      ...taskFields
-    } = taskData;
-
-    // Generate external ID if not provided
-    if (!taskFields.externalId) {
-      taskFields.externalId = generatePrefixedExternalId("task");
-    }
-
-    // Convert string dates to Date objects
-    const taskWithDates = {
-      ...taskFields,
-      executionPeriodStart: executionPeriodStart
-        ? new Date(executionPeriodStart)
-        : null,
-      executionPeriodEnd: executionPeriodEnd
-        ? new Date(executionPeriodEnd)
-        : null,
-      authoredOn: authoredOn ? new Date(authoredOn) : new Date(),
-    };
-
-    const task = await prisma.task.create({
-      data: taskWithDates,
-      include: {
-        requester: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            specialty: true,
-          },
-        },
-        owner: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            specialty: true,
-          },
-        },
-      },
+    return await this.create(taskData, {
+      validation: createTaskSchema,
+      externalIdPrefix: "task",
+      dateFields: ["executionPeriodStart", "executionPeriodEnd", "authoredOn"],
+      includes: this.getDefaultIncludes(),
     });
-
-    return task;
   }
 
+  /**
+   * Update a task
+   * @param {string} id - Task ID
+   * @param {Object} taskData - Updated task data
+   * @returns {Promise<Object>}
+   */
   async updateTask(id, taskData) {
-    const {
-      executionPeriodStart,
-      executionPeriodEnd,
-      authoredOn,
-      ...taskFields
-    } = taskData;
-
-    const updateData = { ...taskFields };
-
-    if (executionPeriodStart) {
-      updateData.executionPeriodStart = new Date(executionPeriodStart);
-    }
-
-    if (executionPeriodEnd) {
-      updateData.executionPeriodEnd = new Date(executionPeriodEnd);
-    }
-
-    if (authoredOn) {
-      updateData.authoredOn = new Date(authoredOn);
-    }
-
-    const task = await prisma.task.update({
-      where: { id },
-      data: updateData,
-      include: {
-        requester: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            specialty: true,
-          },
-        },
-        owner: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            specialty: true,
-          },
-        },
-      },
+    return await this.update(id, taskData, {
+      validation: updateTaskSchema,
+      dateFields: ["executionPeriodStart", "executionPeriodEnd", "authoredOn"],
+      includes: this.getDefaultIncludes(),
     });
-
-    return task;
   }
 
+  /**
+   * Get task by ID
+   * @param {string} id - Task ID
+   * @returns {Promise<Object|null>}
+   */
   async getTaskById(id) {
-    const task = await prisma.task.findFirst({
-      where: {
-        id,
-        deletedAt: null, // Only get non-deleted tasks
-      },
-      include: {
-        requester: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            specialty: true,
-          },
-        },
-        owner: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            specialty: true,
-          },
-        },
-      },
+    return await this.findById(id, {
+      includes: this.getDefaultIncludes(),
     });
-
-    return task;
   }
 
+  /**
+   * Get task by external ID
+   * @param {string} externalId - External ID
+   * @returns {Promise<Object|null>}
+   */
   async getTaskByExternalId(externalId) {
-    const task = await prisma.task.findFirst({
-      where: {
-        externalId,
-        deletedAt: null,
-      },
-      include: {
-        requester: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            specialty: true,
-          },
-        },
-        owner: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            specialty: true,
-          },
-        },
-      },
+    return await this.findByExternalId(externalId, {
+      includes: this.getDefaultIncludes(),
     });
-
-    return task;
   }
 
+  /**
+   * Get all tasks with filtering and pagination
+   * @param {number} page - Page number
+   * @param {number} limit - Items per page
+   * @param {Object} filters - Filter conditions
+   * @returns {Promise<{tasks: Array, pagination: Object}>}
+   */
   async getAllTasks(page = 1, limit = 10, filters = {}) {
-    const skip = (page - 1) * limit;
-    const where = {
-      deletedAt: null, // Only get non-deleted tasks
-    };
+    const {
+      status,
+      intent,
+      priority,
+      requesterId,
+      ownerId,
+      focusId,
+      focusType,
+      authoredOnStart,
+      authoredOnEnd,
+      search,
+    } = filters;
+
+    const fetcher = this.createFetcher()
+      .excludeDeleted()
+      .paginate(page, limit)
+      .orderBy({ authoredOn: "desc" })
+      .include(this.getDefaultIncludes());
 
     // Apply filters
-    if (filters.status) {
-      where.status = filters.status;
+    if (status) fetcher.where({ status });
+    if (intent) fetcher.where({ intent });
+    if (priority) fetcher.where({ priority });
+    if (requesterId) fetcher.where({ requesterId });
+    if (ownerId) fetcher.where({ ownerId });
+    if (focusId) fetcher.where({ focusId });
+    if (focusType) fetcher.where({ focusType });
+
+    // Date range filter
+    if (authoredOnStart || authoredOnEnd) {
+      fetcher.dateRange("authoredOn", authoredOnStart, authoredOnEnd);
     }
 
-    if (filters.intent) {
-      where.intent = filters.intent;
-    }
-
-    if (filters.priority) {
-      where.priority = filters.priority;
-    }
-
-    if (filters.requesterId) {
-      where.requesterId = filters.requesterId;
-    }
-
-    if (filters.ownerId) {
-      where.ownerId = filters.ownerId;
-    }
-
-    if (filters.focusId) {
-      where.focusId = filters.focusId;
-    }
-
-    if (filters.focusType) {
-      where.focusType = filters.focusType;
-    }
-
-    if (filters.authoredOnStart && filters.authoredOnEnd) {
-      where.authoredOn = {
-        gte: new Date(filters.authoredOnStart),
-        lte: new Date(filters.authoredOnEnd),
-      };
-    } else if (filters.authoredOnStart) {
-      where.authoredOn = {
-        gte: new Date(filters.authoredOnStart),
-      };
-    } else if (filters.authoredOnEnd) {
-      where.authoredOn = {
-        lte: new Date(filters.authoredOnEnd),
-      };
-    }
-
-    if (filters.search) {
-      where.OR = [
-        { code: { contains: filters.search, mode: "insensitive" } },
-        { description: { contains: filters.search, mode: "insensitive" } },
-        { externalId: { contains: filters.search, mode: "insensitive" } },
-        {
-          requester: {
-            OR: [
-              { firstName: { contains: filters.search, mode: "insensitive" } },
-              { lastName: { contains: filters.search, mode: "insensitive" } },
-            ],
-          },
-        },
-        {
-          owner: {
-            OR: [
-              { firstName: { contains: filters.search, mode: "insensitive" } },
-              { lastName: { contains: filters.search, mode: "insensitive" } },
-            ],
-          },
-        },
-      ];
-    }
-
-    const [tasks, total] = await Promise.all([
-      prisma.task.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { authoredOn: "desc" },
-        include: {
-          requester: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              specialty: true,
+    // Search functionality
+    if (search) {
+      fetcher.where({
+        OR: [
+          { code: { contains: search, mode: "insensitive" } },
+          { description: { contains: search, mode: "insensitive" } },
+          { externalId: { contains: search, mode: "insensitive" } },
+          {
+            requester: {
+              OR: [
+                { firstName: { contains: search, mode: "insensitive" } },
+                { lastName: { contains: search, mode: "insensitive" } },
+              ],
             },
           },
-          owner: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              specialty: true,
+          {
+            owner: {
+              OR: [
+                { firstName: { contains: search, mode: "insensitive" } },
+                { lastName: { contains: search, mode: "insensitive" } },
+              ],
             },
           },
-        },
-      }),
-      prisma.task.count({ where }),
-    ]);
+        ],
+      });
+    }
+
+    const result = await fetcher.findMany();
 
     return {
-      tasks,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
+      tasks: result.data,
+      pagination: result.pagination,
     };
   }
 
+  /**
+   * Get tasks by practitioner
+   * @param {string} practitionerId - Practitioner ID
+   * @param {number} page - Page number
+   * @param {number} limit - Items per page
+   * @returns {Promise<{tasks: Array, pagination: Object}>}
+   */
   async getTasksByPractitioner(practitionerId, page = 1, limit = 10) {
-    const skip = (page - 1) * limit;
-    const where = {
-      OR: [{ requesterId: practitionerId }, { ownerId: practitionerId }],
-      deletedAt: null,
-    };
+    const fetcher = this.createFetcher()
+      .excludeDeleted()
+      .where({
+        OR: [{ requesterId: practitionerId }, { ownerId: practitionerId }],
+      })
+      .paginate(page, limit)
+      .orderBy({ authoredOn: "desc" })
+      .include(this.getDefaultIncludes());
 
-    const [tasks, total] = await Promise.all([
-      prisma.task.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { authoredOn: "desc" },
-        include: {
-          requester: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              specialty: true,
-            },
-          },
-          owner: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              specialty: true,
-            },
-          },
-        },
-      }),
-      prisma.task.count({ where }),
-    ]);
+    const result = await fetcher.findMany();
 
     return {
-      tasks,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
+      tasks: result.data,
+      pagination: result.pagination,
     };
   }
 
+  /**
+   * Delete task (soft delete)
+   * @param {string} id - Task ID
+   * @returns {Promise<void>}
+   */
   async deleteTask(id) {
-    // Soft delete - set deletedAt timestamp
-    await prisma.task.update({
-      where: { id },
-      data: {
-        deletedAt: new Date(),
-      },
-    });
+    await this.softDelete(id);
   }
 
+  /**
+   * Restore task
+   * @param {string} id - Task ID
+   * @returns {Promise<void>}
+   */
   async restoreTask(id) {
-    // Restore soft deleted task
-    await prisma.task.update({
-      where: { id },
-      data: {
-        deletedAt: null,
-      },
-    });
+    await this.restore(id);
   }
 
+  /**
+   * Update task status
+   * @param {string} id - Task ID
+   * @param {string} status - New status
+   * @param {string} notes - Optional notes
+   * @returns {Promise<Object>}
+   */
   async updateTaskStatus(id, status, notes = null) {
     const updateData = {
       status,
@@ -349,61 +199,70 @@ class TaskService {
         : `Status update: ${notes}`;
     }
 
-    const task = await prisma.task.update({
+    return await this.prismaModel.update({
       where: { id },
       data: updateData,
-      include: {
-        requester: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            specialty: true,
-          },
-        },
-        owner: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            specialty: true,
-          },
-        },
-      },
+      include: this.getDefaultIncludes(),
     });
-
-    return task;
   }
 
+  /**
+   * Assign task to practitioner
+   * @param {string} id - Task ID
+   * @param {string} ownerId - Owner ID
+   * @returns {Promise<Object>}
+   */
   async assignTask(id, ownerId) {
-    const task = await prisma.task.update({
+    return await this.prismaModel.update({
       where: { id },
       data: {
         ownerId,
         status: "accepted",
         lastModified: new Date(),
       },
-      include: {
-        requester: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            specialty: true,
-          },
-        },
-        owner: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            specialty: true,
-          },
+      include: this.getDefaultIncludes(),
+    });
+  }
+
+  /**
+   * Override getDefaultIncludes
+   * @returns {Object}
+   */
+  getDefaultIncludes() {
+    return {
+      requester: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          specialty: true,
         },
       },
-    });
+      owner: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          specialty: true,
+        },
+      },
+    };
+  }
 
-    return task;
+  /**
+   * Override getDefaultSearchFields
+   * @returns {Array<string>}
+   */
+  getDefaultSearchFields() {
+    return ["code", "description", "externalId"];
+  }
+
+  /**
+   * Override getCollectionName
+   * @returns {string}
+   */
+  getCollectionName() {
+    return "tasks";
   }
 }
 
