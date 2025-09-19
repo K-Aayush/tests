@@ -164,6 +164,79 @@ const typeDefs = gql`
     updatePatient(id: ID!, input: UpdatePatientInput!): Patient!
     deletePatient(id: ID!): Boolean!
   }
+
+  enum EntityType {
+    PATIENT
+    PRACTITIONER
+    ORGANIZATION
+  }
+
+  type UserEntityLink {
+    id: ID!
+    userId: String!
+    entityId: String!
+    entityType: EntityType!
+    createdAt: String!
+    updatedAt: String!
+    user: User
+  }
+
+  type User {
+    id: ID!
+    email: String!
+    firstName: String
+    lastName: String
+    middleName: String
+    phoneNumber: String
+    isEmailVerified: Boolean!
+    lastLogin: String
+    createdAt: String!
+    updatedAt: String!
+    entityLinks: [UserEntityLink!]!
+  }
+
+  input CreatePatientPortalInput {
+    # User fields
+    email: String!
+    password: String!
+    firstName: String
+    lastName: String
+    middleName: String
+    phoneNumber: String
+
+    # Patient fields
+    patientFirstName: String!
+    patientLastName: String!
+    patientMiddleName: String
+    preferredName: String
+    contactPointType: ContactPointSystem!
+    contactPointValue: String!
+    gender: AdministrativeGender!
+    birthDate: String!
+    deceased: Boolean
+    address: [AddressInput!]!
+    identifier: [IdentifierInput!]!
+    maritalStatus: String
+    empi: String
+    generalPractitioner: String
+  }
+
+  type PatientPortalResponse {
+    user: User!
+    patient: Patient!
+    userEntityLink: UserEntityLink!
+  }
+
+  extend type Query {
+    me: User
+    myPatientRecord: Patient
+  }
+
+  extend type Mutation {
+    createPatientPortalAccount(
+      input: CreatePatientPortalInput!
+    ): PatientPortalResponse!
+  }
 `;
 
 module.exports = typeDefs;
