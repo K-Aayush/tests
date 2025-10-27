@@ -23,8 +23,13 @@ const authenticateToken = async (req, res, next) => {
         email: true,
         firstName: true,
         lastName: true,
-        role: true,
         isEmailVerified: true,
+        UserEntityLink: {
+          select: {
+            entityId: true,
+            entityType: true,
+          },
+        },
       },
     });
 

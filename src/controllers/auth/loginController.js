@@ -31,8 +31,23 @@ exports.login = async (req, res) => {
       });
     }
 
+    // Check if email is verified
+    if (!user.isEmailVerified) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Email verification required. Please verify your email before logging in.",
+      });
+    }
+
     // Generate tokens
-    const payload = { id: user.id, email: user.email, role: user.role };
+    const payload = {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+    };
+
     const accessToken = await generateAccessToken(payload);
     const refreshToken = await generateRefreshToken({ id: user.id });
 

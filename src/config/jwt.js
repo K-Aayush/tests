@@ -84,7 +84,7 @@ const generateRefreshToken = async (payload) => {
 
 // Whitelist allowed claims for access tokens
 const sanitizeTokenPayload = (payload) => {
-  const allowedClaims = ["id", "email", "role", "firstName", "lastName"];
+  const allowedClaims = ["id", "email", "firstName", "lastName"];
   const sanitized = {};
 
   allowedClaims.forEach((claim) => {

@@ -61,7 +61,6 @@ const registerSchema = z.object({
     .string()
     .regex(/^\+?[\d\s\-\(\)]{10,15}$/, "Please provide a valid phone number")
     .optional(),
-  role: z.enum(["USER", "ADMIN"]).default("USER").optional(),
 });
 
 const loginSchema = z.object({

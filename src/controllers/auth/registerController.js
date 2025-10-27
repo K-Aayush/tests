@@ -4,15 +4,16 @@ const emailService = require("../../services/emailService");
 
 exports.register = async (req, res) => {
   try {
-    const {
-      email,
-      password,
-      firstName,
-      lastName,
-      middleName,
-      phoneNumber,
-      role,
-    } = req.body;
+    const { email, password, firstName, lastName, middleName, phoneNumber } =
+      req.body;
+
+    if (!email || !password || !firstName || !lastName || !phoneNumber) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Email, password, first name, last name, and phone number are required.",
+      });
+    }
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
@@ -42,7 +43,6 @@ exports.register = async (req, res) => {
         lastName,
         middleName,
         phoneNumber,
-        role,
       },
       select: {
         id: true,
@@ -51,7 +51,6 @@ exports.register = async (req, res) => {
         lastName: true,
         middleName: true,
         phoneNumber: true,
-        role: true,
         isEmailVerified: true,
         createdAt: true,
       },
@@ -83,7 +82,6 @@ exports.register = async (req, res) => {
       message:
         "User registered successfully. Please check your email for verification code.",
       data: {
-        user,
         emailSent: emailResult.success,
       },
     });

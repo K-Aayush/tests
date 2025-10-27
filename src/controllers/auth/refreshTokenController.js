@@ -31,7 +31,8 @@ exports.refreshToken = async (req, res) => {
     const payload = {
       id: tokenRecord.user.id,
       email: tokenRecord.user.email,
-      role: tokenRecord.user.role,
+      firstName: tokenRecord.user.firstName,
+      lastName: tokenRecord.user.lastName,
     };
     const newAccessToken = await generateAccessToken(payload);
 

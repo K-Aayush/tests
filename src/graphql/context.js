@@ -19,8 +19,13 @@ const createContext = async ({ req }) => {
           email: true,
           firstName: true,
           lastName: true,
-          role: true,
           isEmailVerified: true,
+          UserEntityLink: {
+            select: {
+              entityType: true,
+              entityId: true,
+            },
+          },
         },
       });
     }

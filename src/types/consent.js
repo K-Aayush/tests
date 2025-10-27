@@ -89,20 +89,37 @@ const createConsentSchema = z
   );
 
 // Update consent schema
-const updateConsentSchema = createConsentSchema.partial().refine(
-  (data) => {
-    if (data.periodStart && data.periodEnd) {
-      const startTime = new Date(data.periodStart);
-      const endTime = new Date(data.periodEnd);
-      return endTime > startTime;
+const updateConsentSchema = z
+  .object({
+    externalId: z.string().optional(),
+    status: ConsentStatus.optional(),
+    category: ConsentCategory.optional(),
+    patientId: z.string().min(1, "Patient ID is required").optional(),
+    organizationId: z.string().optional(),
+    dateTime: z.string().datetime().optional(),
+    periodStart: z.string().datetime().optional(),
+    periodEnd: z.string().datetime().optional(),
+    provision: provisionSchema.optional(),
+    sourceAttachment: z.string().url().optional(),
+    grantedBy: z.string().optional(),
+    witnessedBy: z.string().optional(),
+    scope: z.string().optional(),
+    purpose: z.array(z.string()).optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.periodStart && data.periodEnd) {
+        const startTime = new Date(data.periodStart);
+        const endTime = new Date(data.periodEnd);
+        return endTime > startTime;
+      }
+      return true;
+    },
+    {
+      message: "Period end must be after start",
+      path: ["periodEnd"],
     }
-    return true;
-  },
-  {
-    message: "Period end must be after start",
-    path: ["periodEnd"],
-  }
-);
+  );
 
 // Consent response schema
 const consentResponseSchema = z.object({

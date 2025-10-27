@@ -11,11 +11,17 @@ exports.getProfile = async (req, res) => {
         lastName: true,
         middleName: true,
         phoneNumber: true,
-        role: true,
         isEmailVerified: true,
         lastLogin: true,
         createdAt: true,
         updatedAt: true,
+        UserEntityLink: {
+          select: {
+            id: true,
+            entityType: true,
+            entityId: true,
+          },
+        },
       },
     });
 
