@@ -23,6 +23,9 @@ model User {
   updatedAt                DateTime         @updatedAt
   middleName               String?
   phoneNumber              String?
+  authProvider             String           @default("email")
+  firebaseUid              String?          @unique
+  photoURL                 String?
   loginSessions            LoginSession[]
   refreshTokens            RefreshToken[]
   UserEntityLink           UserEntityLink[]

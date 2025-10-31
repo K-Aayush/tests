@@ -7,11 +7,17 @@ exports.register = async (req, res) => {
     const { email, password, firstName, lastName, middleName, phoneNumber } =
       req.body;
 
-    if (!email || !password || !firstName || !lastName || !phoneNumber) {
+    if (!email || !firstName || !lastName || !phoneNumber) {
       return res.status(400).json({
         success: false,
-        message:
-          "Email, password, first name, last name, and phone number are required.",
+        message: "Email, first name, last name, and phone number are required.",
+      });
+    }
+
+    if (!password) {
+      return res.status(400).json({
+        success: false,
+        message: "Password is required for email registration.",
       });
     }
 

@@ -6,6 +6,11 @@ const { logout } = require("../controllers/auth/logoutController");
 const { verifyEmail } = require("../controllers/auth/verifyEmailController");
 const { refreshToken } = require("../controllers/auth/refreshTokenController");
 const {
+  oauthLogin,
+  getFirebaseConfig,
+} = require("../controllers/auth/oauthController");
+
+const {
   requestPasswordReset,
   resetPassword,
 } = require("../controllers/auth/passwordResetController");
@@ -53,6 +58,10 @@ router.post(
   validateRequest(passwordResetSchema),
   resetPassword
 );
+
+// OAuth routes
+router.post("/oauth/login", loginLimiter, oauthLogin);
+router.get("/firebase/config", getFirebaseConfig);
 
 // Protected routes
 router.post("/logout", authenticateToken, logout);

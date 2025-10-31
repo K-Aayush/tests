@@ -24,7 +24,15 @@ exports.login = async (req, res) => {
       },
     });
 
-    if (!user || !(await bcrypt.compare(password, user.password))) {
+    if (!user.password) {
+      return res.status(401).json({
+        success: false,
+        message:
+          "This account uses OAuth login. Please use 'Continue with Google' or 'Continue with Apple'.",
+      });
+    }
+
+    if (!(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({
         success: false,
         message: "Invalid credentials",

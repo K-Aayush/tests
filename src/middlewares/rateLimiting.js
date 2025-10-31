@@ -79,7 +79,7 @@ const registrationLimiter = rateLimit({
     res.status(429).json({
       success: false,
       message: "Too many registration attempts. Please try again later.",
-      retryAfter: 3600, 
+      retryAfter: 3600,
     });
   },
   standardHeaders: true,
