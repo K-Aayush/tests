@@ -37,7 +37,7 @@ exports.oauthLogin = async (req, res) => {
     const firebaseUser = verificationResult.user;
 
     const email = firebaseUser.email;
-    const firebaseUid = firebaseUser.uid;
+    const authProviderId = firebaseUser.uid;
     const displayName = firebaseUser.name || "";
     const photoURL = firebaseUser.picture || null;
 
@@ -48,26 +48,26 @@ exports.oauthLogin = async (req, res) => {
       });
     }
 
-    const nameParts = displayName.split(" ");
+    const nameParts = displayName ? displayName.trim().split(/\s+/) : [];
     const firstName = nameParts[0] || "";
-    const lastName = nameParts.slice(1).join(" ") || "";
+    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
 
     let user = await prisma.user.findUnique({
       where: { email },
     });
 
     if (user) {
-      if (user.authProvider === "email" && !user.firebaseUid) {
+      if (user.authProvider === "email" && !user.authProviderId) {
         user = await prisma.user.update({
           where: { id: user.id },
           data: {
-            firebaseUid,
+            authProviderId,
             authProvider: provider,
             photoURL,
             isEmailVerified: true,
           },
         });
-      } else if (user.firebaseUid !== firebaseUid) {
+      } else if (user.authProviderId !== authProviderId) {
         return res.status(409).json({
           success: false,
           message: "Email already registered with a different provider",
@@ -88,7 +88,7 @@ exports.oauthLogin = async (req, res) => {
           firstName,
           lastName,
           authProvider: provider,
-          firebaseUid,
+          authProviderId,
           photoURL,
           isEmailVerified: true,
           password: null,
@@ -103,10 +103,13 @@ exports.oauthLogin = async (req, res) => {
       lastName: user.lastName,
     };
 
-    const accessToken = await generateAccessToken(payload);
-    const refreshToken = await generateRefreshToken({ id: user.id });
+    const [accessToken, refreshToken] = await Promise.all([
+      generateAccessToken(payload),
+      generateRefreshToken({ id: user.id }),
+    ]);
 
     const accessDecoded = jwt.decode(accessToken);
+    const now = new Date();
 
     await prisma.refreshToken.create({
       data: {
@@ -129,7 +132,7 @@ exports.oauthLogin = async (req, res) => {
 
     await prisma.user.update({
       where: { id: user.id },
-      data: { lastLogin: new Date() },
+      data: { lastLogin: now },
     });
 
     const { password, ...userResponse } = user;
@@ -150,32 +153,7 @@ exports.oauthLogin = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "OAuth login failed",
-      error: error.message,
-    });
-  }
-};
-
-exports.getFirebaseConfig = async (req, res) => {
-  try {
-    const { getFirebaseClientConfig } = require("../../config/firebase");
-    const config = getFirebaseClientConfig();
-
-    if (!config.apiKey) {
-      return res.status(503).json({
-        success: false,
-        message: "Firebase not configured on server",
-      });
-    }
-
-    res.json({
-      success: true,
-      data: config,
-    });
-  } catch (error) {
-    console.error("Get Firebase config error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to get Firebase configuration",
+      error: error.code || "LOGIN_ERROR",
     });
   }
 };

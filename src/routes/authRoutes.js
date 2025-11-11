@@ -7,7 +7,6 @@ const { verifyEmail } = require("../controllers/auth/verifyEmailController");
 const { refreshToken } = require("../controllers/auth/refreshTokenController");
 const {
   oauthLogin,
-  getFirebaseConfig,
 } = require("../controllers/auth/oauthController");
 
 const {
@@ -61,7 +60,6 @@ router.post(
 
 // OAuth routes
 router.post("/oauth/login", loginLimiter, oauthLogin);
-router.get("/firebase/config", getFirebaseConfig);
 
 // Protected routes
 router.post("/logout", authenticateToken, logout);

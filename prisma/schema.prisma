@@ -10,7 +10,7 @@ datasource db {
 model User {
   id                       String           @id @default(uuid())
   email                    String           @unique
-  password                 String
+  password                 String?
   firstName                String?
   lastName                 String?
   isEmailVerified          Boolean          @default(false)
@@ -24,7 +24,7 @@ model User {
   middleName               String?
   phoneNumber              String?
   authProvider             String           @default("email")
-  firebaseUid              String?          @unique
+  authProviderId              String?          @unique
   photoURL                 String?
   loginSessions            LoginSession[]
   refreshTokens            RefreshToken[]
