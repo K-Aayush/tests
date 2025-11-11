@@ -120,6 +120,102 @@ To be added using Jest and Supertest.
 
 ---
 
-## 👥 License
+---
 
-MIT – open for contribution and modification.
+# Firebase Setup
+
+This application uses Firebase Authentication with Google Cloud Service Account Impersonation for secure OAuth login functionality.
+
+## 🔧 Prerequisites
+
+- [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) installed
+- Firebase project created
+- Google Cloud project with Firebase enabled
+
+## 🚀 Firebase Configuration
+
+### Step 1: Create Firebase Project
+
+1. Go to [Firebase Console](https://console.firebase.google.com/)
+2. Create a new project or select existing: 
+3. Enable **Authentication** → **Sign-in method** → **Google** (and/or Apple)
+
+### Step 2: Setup Google Cloud Authentication
+
+```powershell
+# Install Google Cloud CLI (if not already installed)
+# Download from: https://cloud.google.com/sdk/docs/install
+
+# Authenticate with Google Cloud
+gcloud auth login
+gcloud auth application-default login
+
+# Set your project
+gcloud config set project caredevi-test
+
+# Verify authentication
+gcloud auth list
+```
+
+### Step 3: Create Service Account (Optional)
+
+If the Firebase service account doesn't exist, create one:
+
+# Create Firebase admin service account
+
+# Grant Firebase Admin role
+
+# Grant yourself impersonation rights
+
+### Step 4: Environment Variables
+
+Add these Firebase configuration variables to your `.env` file:
+
+```bash
+# Firebase Configuration (Service Account Impersonation)
+FIREBASE_ADMIN_PROJECT_ID= xxx
+FIREBASE_SERVICE_ACCOUNT_EMAIL= xxx
+USE_SERVICE_ACCOUNT_IMPERSONATION="true"
+
+# Optional: Client-side Firebase config (for frontend)
+# FIREBASE_API_KEY="your-api-key"
+# FIREBASE_AUTH_DOMAIN=
+# FIREBASE_STORAGE_BUCKET=
+# FIREBASE_MESSAGING_SENDER_ID=
+# FIREBASE_APP_ID=
+```
+
+### Step 5: Find Your Service Account Email
+
+**Option 1: Firebase Console**
+1. Go to [Firebase Console](https://console.firebase.google.com/)
+2. Select your project: `caredevi-test`
+3. **Project Settings** → **Service Accounts** tab
+4. Copy the email 
+
+## 🔍 Testing Firebase Setup
+
+### Test Server Startup
+```powershell
+npm run dev
+```
+
+**Expected output:**
+```
+🔄 Initializing Firebase Admin with service account impersonation...
+✅ Firebase Admin SDK initialized with service account impersonation
+✅ GraphQL endpoint ready at /graphql
+🚀 Server running on port 4000
+```
+
+### Test Firebase Endpoints
+
+**Health Check:**
+```powershell
+Invoke-RestMethod -Uri "http://localhost:4000/api/auth/firebase-config" -Method GET
+```
+
+**OAuth Login (Test):**
+```powershell
+Invoke-RestMethod -Uri "http://localhost:4000/api/auth/oauth/login" -Method POST -ContentType "application/json" -Body '{"idToken":"test","provider":"google"}'
+```

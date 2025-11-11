@@ -24,8 +24,8 @@ model User {
   middleName               String?
   phoneNumber              String?
   authProvider             String           @default("email")
-  authProviderId              String?          @unique
   photoURL                 String?
+  authProviderId           String?          @unique
   loginSessions            LoginSession[]
   refreshTokens            RefreshToken[]
   UserEntityLink           UserEntityLink[]

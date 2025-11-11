@@ -24,6 +24,7 @@
     "express-rate-limit": "^7.1.5",
     "firebase": "^12.4.0",
     "firebase-admin": "^13.5.0",
+    "google-auth-library": "^10.5.0",
     "graphql": "^16.11.0",
     "graphql-tag": "^2.12.6",
     "helmet": "^7.1.0",
